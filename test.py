@@ -1,13 +1,3 @@
-# lambda_function.py — CloudWatch Custom Widget (popup verify, robust confirm/close)
-# - This Lambda MUST be in the SAME account+region as the dashboard (endpoint).
-# - Buttons call THIS Lambda; this Lambda can invoke remote target Lambdas (any account/region).
-#
-# Fixes:
-#   • Confirm inside popup sends all values via params so it doesn't depend on forms in the popup.
-#   • Close/Back uses display="widget" to refresh widget area (collapses popup).
-#
-# Docs: <cwdb-action> acts on the immediately previous element, supports display="popup|widget". :contentReference[oaicite:0]{index=0}
-
 import html
 import json
 import re
@@ -15,19 +5,26 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 
-# ========= CONFIG: remote targets (can be cross-account/region) =========
+# =========================
+# CONFIG — set your targets
+# =========================
+# These target lambdas can be in OTHER accounts/regions:
 TARGET_REQUEST_LAMBDA_ARN = "arn:aws:lambda:us-west-2:222222222222:function:my-request-lambda"
 TARGET_SECRET_LAMBDA_ARN  = "arn:aws:lambda:eu-central-1:333333333333:function:my-secret-lambda"
 
-# Optional: assume this role in the TARGET account(s) before invoking
+# Optional: assume this role in the TARGET account(s) before invoking them.
+# Leave as None to use this widget lambda's own execution role/permissions.
 TARGET_INVOKE_ROLE_ARN: Optional[str] = None  # e.g., "arn:aws:iam::222222222222:role/InvokeFromWidgetRole"
 
-# ========= Sample dynamic rows / approvers (swap with your data source) =========
+# =========================
+# SAMPLE DATA (make dynamic)
+# =========================
 ROWS: List[Dict[str, Any]] = [
     {"id": 3001, "client": "TestClient A", "account": "TestUserA"},
     {"id": 3002, "client": "TestClient B", "account": "TestUserB"},
     {"id": 3003, "client": "TestClient C", "account": "TestUserC"},
 ]
+
 APPROVERS: List[Dict[str, str]] = [
     {"name": "Alice Smith", "email": "alice@example.com"},
     {"name": "Bob Johnson", "email": "bob@example.com"},
@@ -35,13 +32,18 @@ APPROVERS: List[Dict[str, str]] = [
 ]
 APPROVER_NAME_BY_EMAIL: Dict[str, str] = {a["email"]: a["name"] for a in APPROVERS}
 
-# ========= Helpers =========
+
+# =========================
+# Helpers
+# =========================
 def _esc(v: Any) -> str:
     return html.escape("" if v is None else str(v))
 
 def _normalize_forms_all(forms_all: Any) -> List[Dict[str, Any]]:
-    if isinstance(forms_all, dict): return [forms_all]
-    if isinstance(forms_all, list): return [d for d in forms_all if isinstance(d, dict)]
+    if isinstance(forms_all, dict):
+        return [forms_all]
+    if isinstance(forms_all, list):
+        return [d for d in forms_all if isinstance(d, dict)]
     return []
 
 def _keys_for_row(rid: int) -> Dict[str, str]:
@@ -53,33 +55,21 @@ def _keys_for_row(rid: int) -> Dict[str, str]:
         "mfa":      f"r_{rid}_mfa",      # MFA code (input)
     }
 
-def _extract_from_forms(dicts: List[Dict[str, Any]], rid: int) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+def _extract_row(dicts: List[Dict[str, Any]], rid: int) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     k = _keys_for_row(rid)
     client = account = email = approver_email = mfa = None
     for d in dicts:
-        if client is None and k["client"] in d:           client = d.get(k["client"])
-        if account is None and k["account"] in d:         account = d.get(k["account"])
-        if email is None and k["email"] in d:             email = d.get(k["email"])
-        if approver_email is None and k["approver"] in d: approver_email = d.get(k["approver"])
-        if mfa is None and k["mfa"] in d:                 mfa = d.get(k["mfa"])
+        if client is None and k["client"] in d:       client = d.get(k["client"])
+        if account is None and k["account"] in d:     account = d.get(k["account"])
+        if email is None and k["email"] in d:         email = d.get(k["email"])
+        if approver_email is None and k["approver"] in d:
+            approver_email = d.get(k["approver"])
+        if mfa is None and k["mfa"] in d:             mfa = d.get(k["mfa"])
     approver_name = APPROVER_NAME_BY_EMAIL.get(approver_email) if approver_email else None
     return client, account, email, approver_email, approver_name, mfa
 
-def _merge_values(params: Dict[str, Any],
-                  forms_vals: Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]
-                 ) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
-    # Prefer explicit params (sent by popup Confirm), fall back to forms
-    f_client, f_account, f_email, f_approver, f_appr_name, f_mfa = forms_vals
-    client        = params.get("client")         or f_client
-    account       = params.get("account")        or f_account
-    email         = params.get("email")          or params.get("requester_email") or f_email
-    approver      = params.get("approver")       or params.get("approver_email")  or f_approver
-    approver_name = params.get("approver_name")  or f_appr_name
-    mfa           = params.get("mfa")            or params.get("mfa_code")        or f_mfa
-    return client, account, email, approver, approver_name, mfa
-
-# ---- cross-region/account invoke helpers ----
 def _parse_region_from_lambda_arn(arn: str) -> str:
+    # arn:aws:lambda:<region>:<acct>:function:<name>
     m = re.match(r"arn:aws:lambda:([a-z0-9-]+):\d+:function:.+", arn)
     if not m:
         raise ValueError(f"Not a Lambda ARN: {arn}")
@@ -101,13 +91,17 @@ def _lambda_client_for_target(arn: str):
 
 def _invoke_lambda(function_arn: str, payload: Dict[str, Any]) -> None:
     client = _lambda_client_for_target(function_arn)
+    # Use "RequestResponse" while debugging to see results in CloudWatch logs.
     client.invoke(
         FunctionName=function_arn,
-        InvocationType="Event",  # use "RequestResponse" if you need to debug responses
+        InvocationType="Event",
         Payload=json.dumps(payload).encode("utf-8"),
     )
 
-# ========= Renderers =========
+
+# =========================
+# Renderers
+# =========================
 from typing import Dict, Any, Optional
 import boto3
 import json
@@ -153,8 +147,9 @@ def _invoke_lambda(arn, payload):
     )
 
 def _banner(endpoint_arn: str) -> str:
+    # Helpful to visually confirm which lambda rendered the widget
     return (
-        "<div style='padding:8px 12px;margin:0 10px 10px 10px;background:#f3f4f6;"
+        "<div style='padding:8px 12px;margin:0 0 10px 0;background:#f3f4f6;"
         "border:1px solid #e5e7eb;border-radius:8px;'>"
         f"<b>Serving from Lambda ARN:</b> <code>{_esc(endpoint_arn)}</code>"
         "</div>"
@@ -195,7 +190,7 @@ def _render_table(endpoint_arn: str) -> str:
             name=_esc(k["account"]), val=_esc(account)
         )
 
-        # Email (no 'required' so HTML5 doesn't block cwdb-action)
+        # Requester Email (no 'required' to avoid blocking <cwdb-action>)
         out += (
             "<td style='padding:6px 8px;'>"
             "<input type='email' name='{name}' placeholder='name@example.com' "
@@ -212,7 +207,7 @@ def _render_table(endpoint_arn: str) -> str:
             out += "<option value='{val}'>{label}</option>".format(val=_esc(a["email"]), label=_esc(a["name"]))
         out += "</select></td>"
 
-        # Request → POPUP verify (no remote invoke yet)
+        # Request → POPUP verify (then confirm to send)
         out += "<td style='padding:6px 8px;'>"
         out += "<a class='btn btn-primary'>Request</a>"
         out += """
@@ -229,7 +224,7 @@ def _render_table(endpoint_arn: str) -> str:
             "</td>".format(name=_esc(k["mfa"]))
         )
 
-        # Secret → POPUP verify
+        # Secret → POPUP verify (then confirm to send)
         out += "<td style='padding:6px 8px;'>"
         out += "<a class='btn'>Secret</a>"
         out += """
@@ -250,10 +245,7 @@ def _render_verify_popup(kind: str, rid: int,
                          email: Optional[str], approver_email: Optional[str],
                          approver_name: Optional[str], mfa: Optional[str],
                          endpoint_arn: str) -> str:
-    """Popup shows values and wires Confirm/Close."""
     title = "Verify Request" if kind == "request" else "Verify Secret"
-    confirm_action = "request_confirm" if kind == "request" else "secret_confirm"
-
     out  = "<div style='padding:12px;max-width:640px;'>"
     out += "<h3 style='margin:0 0 8px 0;'>{}</h3>".format(_esc(title))
     out += "<div style='line-height:1.7;'>"
@@ -268,34 +260,16 @@ def _render_verify_popup(kind: str, rid: int,
     out += "<div><b>MFA Code</b>: {}</div>".format(_esc(mfa))
     out += "</div><div style='height:10px;'></div>"
 
-    # IMPORTANT: send all values in params so confirm doesn't depend on forms in popup
+    # Confirm -> call this widget lambda to perform the actual invoke
+    confirm_action = "request_confirm" if kind == "request" else "secret_confirm"
     out += "<a class='btn btn-primary' style='margin-right:8px;'>Confirm</a>"
     out += """
 <cwdb-action action="call" display="widget" endpoint="{endpoint}">
-  {{
-    "action": "{confirm}",
-    "rowId": {rid},
-    "client": {client_json},
-    "account": {account_json},
-    "email": {email_json},
-    "approver": {approver_json},
-    "approver_name": {approver_name_json},
-    "mfa": {mfa_json}
-  }}
+  {{ "action": "{confirm}", "rowId": {rid} }}
 </cwdb-action>
-""".strip().format(
-        endpoint=_esc(endpoint_arn),
-        confirm=_esc(confirm_action),
-        rid=rid,
-        client_json=json.dumps(client),
-        account_json=json.dumps(account),
-        email_json=json.dumps(email),
-        approver_json=json.dumps(approver_email),
-        approver_name_json=json.dumps(approver_name),
-        mfa_json=json.dumps(mfa),
-    )
+""".strip().format(endpoint=_esc(endpoint_arn), confirm=_esc(confirm_action), rid=rid)
 
-    # Close -> refresh widget content (collapses popup)
+    # Close -> go back to table
     out += "<a class='btn'>Close</a>"
     out += """
 <cwdb-action action="call" display="widget" endpoint="{endpoint}">
@@ -321,16 +295,19 @@ def _render_ok(title: str, details: Dict[str, Any], endpoint_arn: str) -> str:
     out += "</div>"
     return out
 
-# ========= Entry =========
+
+# =========================
+# Entry point
+# =========================
 def lambda_handler(event: Dict[str, Any], context: Any):
-    # Docs tab
+    # Docs panel
     if event.get("describe"):
         return {
             "markdown": (
-                "### Custom Widget with Verify Popups\n"
-                "- Dashboard and this Lambda must be same account/region.\n"
-                "- Confirm in popup sends all values via params; no dependency on forms inside popup.\n"
-                "- This Lambda can invoke cross-region/account targets with proper IAM."
+                "### Dynamic Request/Secret Widget (cross-region proxy)\n"
+                "- Dashboard and THIS lambda must be in the same account/region.\n"
+                "- Buttons call this lambda; this lambda invokes remote target lambdas.\n"
+                "- Text columns (Client/Account) are mirrored as hidden inputs so they arrive in forms.all."
             )
         }
 
@@ -345,20 +322,17 @@ def lambda_handler(event: Dict[str, Any], context: Any):
     if not action or action == "back" or rid is None:
         return _render_table(endpoint_arn)
 
-    # Extract from forms (if available)
+    # Extract row values from forms
     dicts = _normalize_forms_all(forms)
-    fvals = _extract_from_forms(dicts, rid)
+    client, account, email, approver_email, approver_name, mfa = _extract_row(dicts, rid)
 
-    # Merge with params (params win)
-    client, account, email, approver_email, approver_name, mfa = _merge_values(params, fvals)
-
-    # Popups
+    # POPUP verification flows
     if action == "request_popup":
         return _render_verify_popup("request", rid, client, account, email, approver_email, approver_name, mfa, endpoint_arn)
     if action == "secret_popup":
         return _render_verify_popup("secret", rid, client, account, email, approver_email, approver_name, mfa, endpoint_arn)
 
-    # Confirms → actually invoke target Lambdas
+    # Confirm → actually invoke target lambdas (cross-region/account allowed via IAM)
     if action == "request_confirm":
         payload = {
             "client": client,
