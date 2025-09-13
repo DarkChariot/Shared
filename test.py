@@ -108,6 +108,50 @@ def _invoke_lambda(function_arn: str, payload: Dict[str, Any]) -> None:
     )
 
 # ========= Renderers =========
+from typing import Dict, Any, Optional
+import boto3
+import json
+import html
+
+# Configuration
+ROWS = [{"id": 1, "client": "example-client", "account": "123456789012"}]
+APPROVERS = [{"name": "John Doe", "email": "john@example.com"}]
+TARGET_REQUEST_LAMBDA_ARN = "arn:aws:lambda:us-east-1:123456789012:function:request-handler"
+TARGET_SECRET_LAMBDA_ARN = "arn:aws:lambda:us-east-1:123456789012:function:secret-handler"
+
+def _esc(text):
+    return html.escape(str(text or ""))
+
+def _keys_for_row(rid):
+    return {
+        "client": f"client_{rid}",
+        "account": f"account_{rid}",
+        "email": f"email_{rid}",
+        "approver": f"approver_{rid}",
+        "mfa": f"mfa_{rid}"
+    }
+
+def _normalize_forms_all(forms):
+    return forms
+
+def _extract_row(dicts, rid):
+    k = _keys_for_row(rid)
+    return (
+        dicts.get(k["client"], ""),
+        dicts.get(k["account"], ""),
+        dicts.get(k["email"], ""),
+        dicts.get(k["approver"], ""),
+        next((a["name"] for a in APPROVERS if a["email"] == dicts.get(k["approver"], "")), ""),
+        dicts.get(k["mfa"], "")
+    )
+
+def _invoke_lambda(arn, payload):
+    boto3.client('lambda').invoke(
+        FunctionName=arn,
+        InvocationType='Event',
+        Payload=json.dumps(payload)
+    )
+
 def _banner(endpoint_arn: str) -> str:
     return (
         "<div style='padding:8px 12px;margin:0 10px 10px 10px;background:#f3f4f6;"
