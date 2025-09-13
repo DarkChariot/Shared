@@ -1,19 +1,29 @@
 # lambda_function.py
 import html
+import json
 from typing import Optional, List, Dict, Any, Tuple
 
-# --------------------------
-# Sample rows (prefill Client + Account; user supplies the rest)
-# --------------------------
+import boto3
+
+# --------------------------------------------------------------------
+# CONFIG: set the ARNs of the two target Lambdas your buttons should call
+# --------------------------------------------------------------------
+TARGET_REQUEST_LAMBDA_ARN = "arn:aws:lambda:us-east-1:123456789012:function:my-request-lambda"
+TARGET_SECRET_LAMBDA_ARN  = "arn:aws:lambda:us-east-1:123456789012:function:my-secret-lambda"
+
+lambda_client = boto3.client("lambda")
+
+# --------------------------------------------------------------------
+# DATA
+# --------------------------------------------------------------------
+# Client + Account are TEXT ONLY (not inputs). Email / Approver / MFA are inputs.
 ROWS: List[Dict[str, Any]] = [
     {"id": 3001, "client": "TestClient A", "account": "TestUserA"},
     {"id": 3002, "client": "TestClient B", "account": "TestUserB"},
     {"id": 3003, "client": "TestClient C", "account": "TestUserC"},
 ]
 
-# Approvers are the same for all rows:
-# Visible to user: name
-# Submitted value: email (hidden)
+# Approvers are the same everywhere (name shown, email hidden as <option value>)
 APPROVERS: List[Dict[str, str]] = [
     {"name": "Alice Smith", "email": "alice@example.com"},
     {"name": "Bob Johnson", "email": "bob@example.com"},
@@ -21,9 +31,9 @@ APPROVERS: List[Dict[str, str]] = [
 ]
 APPROVER_NAME_BY_EMAIL: Dict[str, str] = {a["email"]: a["name"] for a in APPROVERS}
 
-# --------------------------
-# Helpers
-# --------------------------
+# --------------------------------------------------------------------
+# HELPERS
+# --------------------------------------------------------------------
 def _esc(v: Any) -> str:
     return html.escape("" if v is None else str(v))
 
@@ -36,47 +46,85 @@ def _normalize_forms_all(forms_all: Any) -> List[Dict[str, Any]]:
     return []
 
 def _keys_for_row(rid: int) -> Dict[str, str]:
-    """Namespaced input names per row."""
+    """Input names that DO exist per row."""
     return {
-        "client":   "r_{rid}_client".format(rid=rid),
-        "account":  "r_{rid}_account".format(rid=rid),
-        "email":    "r_{rid}_email".format(rid=rid),
-        "approver": "r_{rid}_approver".format(rid=rid),  # dropdown value = approver email
-        "mfa":      "r_{rid}_mfa".format(rid=rid),
+        "email":    f"r_{rid}_email",     # Requester Email
+        "approver": f"r_{rid}_approver",  # dropdown value = approver email
+        "mfa":      f"r_{rid}_mfa",       # MFA code
     }
 
-def _extract_row_values(dicts: List[Dict[str, Any]], rid: int) -> Tuple[
-    Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]
-]:
+def _row_static_values(rid: int) -> Tuple[Optional[str], Optional[str]]:
+    """Return (client, account) for row id from ROWS."""
+    for r in ROWS:
+        if r["id"] == rid:
+            return r.get("client"), r.get("account")
+    return None, None
+
+def _extract_dynamic_values(dicts: List[Dict[str, Any]], rid: int) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
-    Pull this row's values from forms['all'].
-    Returns: client, account, email, approver_email, approver_name, mfa
+    Extract Requester Email, Approver Email(+Name), MFA from forms['all'] for a row.
+    Returns (requester_email, approver_email, approver_name, mfa_code)
     """
     k = _keys_for_row(rid)
-    client = account = email = approver_email = mfa = None  # type: Optional[str]
-
+    requester_email = approver_email = mfa = None
     for d in dicts:
-        if k["client"]   in d: client         = d.get(k["client"])
-        if k["account"]  in d: account        = d.get(k["account"])
-        if k["email"]    in d: email          = d.get(k["email"])
-        if k["approver"] in d: approver_email = d.get(k["approver"])
-        if k["mfa"]      in d: mfa            = d.get(k["mfa"])
+        if k["email"] in d:
+            requester_email = d.get(k["email"])
+        if k["approver"] in d:
+            approver_email = d.get(k["approver"])
+        if k["mfa"] in d:
+            mfa = d.get(k["mfa"])
 
-    approver_name: Optional[str] = (
-        APPROVER_NAME_BY_EMAIL.get(approver_email) if approver_email else None
+    approver_name: Optional[str] = APPROVER_NAME_BY_EMAIL.get(approver_email) if approver_email else None
+    return requester_email, approver_email, approver_name, mfa
+
+# --------------------------------------------------------------------
+# INVOKERS
+# --------------------------------------------------------------------
+def _invoke_request_lambda(client_txt: Optional[str], account_txt: Optional[str],
+                           requester_email: Optional[str], approver_email: Optional[str]) -> Dict[str, Any]:
+    payload = {
+        "client": client_txt,
+        "account": account_txt,
+        "requester_email": requester_email,
+        "approver_email": approver_email,
+    }
+    # Fire-and-forget. Use "RequestResponse" if you need the response payload.
+    lambda_client.invoke(
+        FunctionName=TARGET_REQUEST_LAMBDA_ARN,
+        InvocationType="Event",
+        Payload=json.dumps(payload).encode("utf-8"),
     )
-    return client, account, email, approver_email, approver_name, mfa
+    return payload
 
-# --------------------------
-# Renderers
-# --------------------------
+def _invoke_secret_lambda(client_txt: Optional[str], account_txt: Optional[str],
+                          requester_email: Optional[str], approver_email: Optional[str],
+                          mfa_code: Optional[str]) -> Dict[str, Any]:
+    payload = {
+        "client": client_txt,
+        "account": account_txt,
+        "requester_email": requester_email,
+        "approver_email": approver_email,
+        "mfa_code": mfa_code,
+    }
+    lambda_client.invoke(
+        FunctionName=TARGET_SECRET_LAMBDA_ARN,
+        InvocationType="Event",
+        Payload=json.dumps(payload).encode("utf-8"),
+    )
+    return payload
+
+# --------------------------------------------------------------------
+# RENDERERS
+# --------------------------------------------------------------------
 def _render_table(endpoint_arn: str) -> str:
     """
-    Main widget view: columns
-    Client | Account Name | Requester Email | Approver | Request | MFA Code | Secret
+    Columns:
+      Client (text) | Account Name (text) | Requester Email (input) | Approver (dropdown)
+      | Request (button) | MFA Code (input) | Secret (button)
     """
     out  = "<div style='padding:10px;'>"
-    out += "<h3 style='margin:0 0 8px 0;'>Client • Account • Email • Approver • Request • MFA • Secret</h3>"
+    out += "<h3 style='margin:0 0 8px 0;'>Client • Account • Requester Email • Approver • Request • MFA Code • Secret</h3>"
     out += "<table style='border-collapse:collapse;width:100%;max-width:1600px;'>"
     out += (
         "<thead><tr>"
@@ -98,19 +146,11 @@ def _render_table(endpoint_arn: str) -> str:
 
         out += "<tr>"
 
-        # Client (prefilled)
-        out += (
-            "<td style='padding:6px 8px;'>"
-            "<input name='{name}' value='{val}' placeholder='Client' style='width:100%;max-width:220px;'/>"
-            "</td>".format(name=_esc(k["client"]), val=_esc(client))
-        )
+        # Client (TEXT ONLY)
+        out += f"<td style='padding:6px 8px;'><span>{_esc(client)}</span></td>"
 
-        # Account Name (prefilled)
-        out += (
-            "<td style='padding:6px 8px;'>"
-            "<input name='{name}' value='{val}' placeholder='Account Name' style='width:100%;max-width:220px;'/>"
-            "</td>".format(name=_esc(k["account"]), val=_esc(account))
-        )
+        # Account (TEXT ONLY)
+        out += f"<td style='padding:6px 8px;'><span>{_esc(account)}</span></td>"
 
         # Requester Email (user types)
         out += (
@@ -131,7 +171,7 @@ def _render_table(endpoint_arn: str) -> str:
             )
         out += "</select></td>"
 
-        # Request button → calls Lambda in the widget area
+        # Request button → calls THIS Lambda; handler will invoke request target Lambda
         out += "<td style='padding:6px 8px;'>"
         out += "<a class='btn btn-primary'>Request</a>"
         out += """
@@ -148,12 +188,12 @@ def _render_table(endpoint_arn: str) -> str:
             "</td>".format(name=_esc(k["mfa"]))
         )
 
-        # Secret button → opens popup for this row
+        # Secret button → calls THIS Lambda; handler will invoke secret target Lambda
         out += "<td style='padding:6px 8px;'>"
         out += "<a class='btn'>Secret</a>"
         out += """
-<cwdb-action action="call" display="popup" endpoint="{endpoint}">
-  {{ "action": "secret_popup", "rowId": {rid} }}
+<cwdb-action action="call" display="widget" endpoint="{endpoint}">
+  {{ "action": "secret", "rowId": {rid} }}
 </cwdb-action>
 """.strip().format(endpoint=_esc(endpoint_arn), rid=rid)
         out += "</td>"
@@ -164,27 +204,13 @@ def _render_table(endpoint_arn: str) -> str:
     out += "</div>"
     return out
 
-def _render_request_confirmation(
-    endpoint_arn: str,
-    rid: int,
-    client: Optional[str],
-    account: Optional[str],
-    email: Optional[str],
-    approver_email: Optional[str],
-    approver_name: Optional[str],
-) -> str:
-    """
-    After clicking 'Request', show a confirmation summary in the widget.
-    """
+def _render_confirmation(title: str, details: Dict[str, Any], endpoint_arn: str) -> str:
     out  = "<div style='padding:10px;'>"
-    out += "<h3 style='margin:0 0 8px 0;'>Request Submitted (Row {rid})</h3>".format(rid=rid)
-    out += "<p><b>Client</b> = <code>{v}</code></p>".format(v=_esc(client))
-    out += "<p><b>Account</b> = <code>{v}</code></p>".format(v=_esc(account))
-    out += "<p><b>Requester Email</b> = <code>{v}</code></p>".format(v=_esc(email))
-    if approver_email:
-        shown = "{name} ({email})".format(name=approver_name or "", email=approver_email) if approver_name else approver_email
-        out += "<p><b>Approver</b> = <code>{v}</code></p>".format(v=_esc(shown))
-
+    out += "<h3 style='margin:0 0 8px 0;'>{}</h3>".format(_esc(title))
+    out += "<div style='line-height:1.7;'>"
+    for k, v in details.items():
+        out += "<div><b>{}</b>: <code>{}</code></div>".format(_esc(k), _esc(v))
+    out += "</div>"
     out += "<div style='height:8px;'></div>"
     out += "<a class='btn'>Back</a>"
     out += """
@@ -195,57 +221,29 @@ def _render_request_confirmation(
     out += "</div>"
     return out
 
-def _render_secret_popup(
-    rid: int,
-    client: Optional[str],
-    account: Optional[str],
-    email: Optional[str],
-    approver_email: Optional[str],
-    approver_name: Optional[str],
-    mfa: Optional[str],
-) -> str:
+# --------------------------------------------------------------------
+# LAMBDA ENTRY
+# --------------------------------------------------------------------
+def lambda_handler(event: Dict[str, Any], context: Any):
     """
-    Popup content for 'Secret' button (display='popup').
-    """
-    out  = "<div style='padding:10px; max-width: 560px;'>"
-    out += "<h3 style='margin:0 0 8px 0;'>Secret Details (Row {rid})</h3>".format(rid=rid)
-    out += "<div style='line-height:1.7;'>"
-    out += "<div><b>Client</b>: {v}</div>".format(v=_esc(client))
-    out += "<div><b>Account</b>: {v}</div>".format(v=_esc(account))
-    out += "<div><b>Requester Email</b>: {v}</div>".format(v=_esc(email))
-    if approver_email:
-        shown = "{name} ({email})".format(name=approver_name or "", email=approver_email) if approver_name else approver_email
-        out += "<div><b>Approver</b>: {v}</div>".format(v=_esc(shown))
-    out += "<div><b>MFA Code</b>: {v}</div>".format(v=_esc(mfa))
-    out += "</div>"
-    out += "</div>"
-    return out
+    Widget columns:
+      Client (text) | Account Name (text) | Requester Email (input) | Approver (dropdown)
+      | Request (button) | MFA Code (input) | Secret (button)
 
-# --------------------------
-# Lambda entry
-# --------------------------
-def lambda_handler(event: Dict[str, Any], context: Any) -> str:
+    Actions handled in this Lambda:
+      - 'request' -> collect row values; invoke TARGET_REQUEST_LAMBDA_ARN
+      - 'secret'  -> collect row values; invoke TARGET_SECRET_LAMBDA_ARN
+      - 'back'    -> re-render table
+      - 'describe'-> docs panel
     """
-    CloudWatch Custom Widget Lambda:
-
-    Columns:
-      Client | Account Name | Requester Email | Approver | Request | MFA Code | Secret
-
-    Actions:
-      - 'request'      -> capture Client, Account, Requester Email, Approver (email) for that row
-      - 'secret_popup' -> open a popup showing Client, Account, Requester Email, Approver, MFA code
-      - 'back'         -> re-render the table
-      - 'describe'     -> widget docs panel
-    """
-    # Docs panel
+    # Docs panel for "Get documentation"
     if event.get("describe"):
         return {
             "markdown": (
-                "### Client/Account/Email/Approver/Request/MFA/Secret Widget\n"
-                "- **Request** button re-invokes Lambda (display=widget) and shows a summary using current inputs.\n"
-                "- **Secret** button opens a **popup** (display=popup) with row details (including MFA Code).\n"
-                "- Approver dropdown shows names; submitted value is the approver's **email**.\n"
-                "- Inputs arrive in `widgetContext.forms.all`; button JSON arrives in `widgetContext.params`.\n"
+                "### Client/Account/Email/Approver + Request/Secret Buttons\n"
+                "- **Request** invokes the configured Request Lambda with client/account/requester_email/approver_email.\n"
+                "- **Secret** invokes the configured Secret Lambda with client/account/requester_email/approver_email/mfa_code.\n"
+                "- Inputs come via `widgetContext.forms.all`; button JSON via `widgetContext.params`.\n"
             )
         }
 
@@ -255,21 +253,44 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> str:
     allvals = forms.get("all") or {}
     action  = params.get("action")
     rid     = params.get("rowId")
-
     endpoint_arn = getattr(context, "invoked_function_arn", "")
 
-    # Normalize inputs for easy extraction
+    # Initial/back -> just render
+    if not action or action == "back" or rid is None:
+        return _render_table(endpoint_arn)
+
+    # Normalize forms for extraction
     dicts = _normalize_forms_all(allvals)
+    requester_email, approver_email, approver_name, mfa = _extract_dynamic_values(dicts, rid)
+    client_txt, account_txt = _row_static_values(rid)
 
-    # Handle Request (widget display)
-    if action == "request" and rid is not None:
-        client, account, email, approver_email, approver_name, _mfa = _extract_row_values(dicts, rid)
-        return _render_request_confirmation(endpoint_arn, rid, client, account, email, approver_email, approver_name)
+    # Route actions
+    if action == "request":
+        sent = _invoke_request_lambda(client_txt, account_txt, requester_email, approver_email)
+        return _render_confirmation(
+            "Request sent",
+            {
+                "client": sent.get("client"),
+                "account": sent.get("account"),
+                "requester_email": sent.get("requester_email"),
+                "approver_email": sent.get("approver_email"),
+            },
+            endpoint_arn,
+        )
 
-    # Handle Secret (popup display)
-    if action == "secret_popup" and rid is not None:
-        client, account, email, approver_email, approver_name, mfa = _extract_row_values(dicts, rid)
-        return _render_secret_popup(rid, client, account, email, approver_email, approver_name, mfa)
+    if action == "secret":
+        sent = _invoke_secret_lambda(client_txt, account_txt, requester_email, approver_email, mfa)
+        return _render_confirmation(
+            "Secret request sent",
+            {
+                "client": sent.get("client"),
+                "account": sent.get("account"),
+                "requester_email": sent.get("requester_email"),
+                "approver_email": sent.get("approver_email"),
+                "mfa_code": sent.get("mfa_code"),
+            },
+            endpoint_arn,
+        )
 
-    # Back or initial load -> render the table
+    # Fallback
     return _render_table(endpoint_arn)
