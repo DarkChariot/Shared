@@ -115,7 +115,7 @@ def lambda_handler(event, context):
     rid = params.get("rowId")
     
     if not action or action == "back":
-        return _render_table(endpoint_arn)
+        return {"body": _render_table(endpoint_arn)}
     
     if action == "request" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
@@ -127,7 +127,7 @@ def lambda_handler(event, context):
             "mfa_code": mfa
         }
         _invoke_lambda(TARGET_REQUEST_LAMBDA_ARN, payload)
-        return _render_success("Request Sent Successfully!", payload)
+        return {"body": _render_success("Request Sent Successfully!", payload)}
     
     if action == "secret" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
@@ -139,6 +139,6 @@ def lambda_handler(event, context):
             "mfa_code": mfa
         }
         _invoke_lambda(TARGET_SECRET_LAMBDA_ARN, payload)
-        return _render_success("Secret Request Sent Successfully!", payload)
+        return {"body": _render_success("Secret Request Sent Successfully!", payload)}
     
-    return _render_table(endpoint_arn)
+    return {"body": _render_table(endpoint_arn)}
