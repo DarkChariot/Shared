@@ -77,10 +77,8 @@ def _render_table(endpoint_arn):
         
         # Request Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += "<a class='btn btn-primary'>Request</a>"
-        out += f"<cwdb-action action='call' display='widget' endpoint='{_esc(endpoint_arn)}'>"
-        out += f'{{"action": "request", "rowId": {rid}}}'
-        out += "</cwdb-action></td>"
+        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{_esc(endpoint_arn)}">{{"action": "request", "rowId": {rid}}}</cwdb-action>'
+        out += "</td>"
         
         # MFA Code (input field)
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
@@ -88,10 +86,8 @@ def _render_table(endpoint_arn):
         
         # Secret Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += "<a class='btn btn-secondary'>Secret</a>"
-        out += f"<cwdb-action action='call' display='widget' endpoint='{_esc(endpoint_arn)}'>"
-        out += f'{{"action": "secret", "rowId": {rid}}}'
-        out += "</cwdb-action></td>"
+        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{_esc(endpoint_arn)}">{{"action": "secret", "rowId": {rid}}}</cwdb-action>'
+        out += "</td>"
         
         out += "</tr>"
     
@@ -106,10 +102,7 @@ def _render_success(message, data):
         out += f"<div><b>{_esc(key)}:</b> {_esc(value)}</div>"
     out += "</div>"
     out += "<div style='margin-top:10px;'>"
-    out += "<a class='btn'>Back to Dashboard</a>"
-    out += "<cwdb-action action='call' display='widget' endpoint=''>"
-    out += '{"action": "back"}'
-    out += "</cwdb-action>"
+    out += '<a class="btn">Back to Dashboard</a><cwdb-action action="call" endpoint="">{"action": "back"}</cwdb-action>'
     out += "</div></div>"
     return out
 
