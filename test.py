@@ -1,30 +1,55 @@
-# lambda_function.py  (Widget Lambda)
+# lambda_function.py  — CloudWatch Custom Widget (proxy across regions)
+# - Must be deployed in the SAME ACCOUNT + REGION as the CloudWatch dashboard.
+# - Buttons call THIS lambda (endpoint=…); this lambda can invoke target lambdas
+#   in ANY account/region (with proper IAM).
+#
+# Flow:
+#   - Table rows are dynamic (ROWS list here; swap with your data source later).
+#   - Client & Account are TEXT (not inputs) but mirrored as hidden inputs so they
+#     appear in widgetContext.forms.all when buttons are clicked.
+#   - Request button -> POPUP to verify -> Confirm calls TARGET_REQUEST_LAMBDA_ARN
+#   - Secret  button -> POPUP to verify -> Confirm calls TARGET_SECRET_LAMBDA_ARN
+#
+# Python 3.9+ compatible.
+
 import html
 import json
-from typing import Optional, List, Dict, Any, Tuple
+import re
+from typing import Any, Dict, List, Optional, Tuple
+
 import boto3
 
-# ---------------- CONFIG: set your target Lambda ARNs ----------------
-TARGET_REQUEST_LAMBDA_ARN = "arn:aws:lambda:us-east-1:123456789012:function:my-request-lambda"
-TARGET_SECRET_LAMBDA_ARN  = "arn:aws:lambda:us-east-1:123456789012:function:my-secret-lambda"
+# =========================
+# CONFIG — set your targets
+# =========================
+# These target lambdas can be in OTHER accounts/regions:
+TARGET_REQUEST_LAMBDA_ARN = "arn:aws:lambda:us-west-2:222222222222:function:my-request-lambda"
+TARGET_SECRET_LAMBDA_ARN  = "arn:aws:lambda:eu-central-1:333333333333:function:my-secret-lambda"
 
-lambda_client = boto3.client("lambda")
+# Optional: assume this role in the TARGET account(s) before invoking them.
+# Leave as None to use this widget lambda's own execution role/permissions.
+TARGET_INVOKE_ROLE_ARN: Optional[str] = None  # e.g., "arn:aws:iam::222222222222:role/InvokeFromWidgetRole"
 
-# ---------------- DYNAMIC ROWS (replace with your data source) -------
+# =========================
+# SAMPLE DATA (make dynamic)
+# =========================
 ROWS: List[Dict[str, Any]] = [
     {"id": 3001, "client": "TestClient A", "account": "TestUserA"},
     {"id": 3002, "client": "TestClient B", "account": "TestUserB"},
     {"id": 3003, "client": "TestClient C", "account": "TestUserC"},
 ]
 
-# Approvers (names shown, email is the option value)
 APPROVERS: List[Dict[str, str]] = [
     {"name": "Alice Smith", "email": "alice@example.com"},
     {"name": "Bob Johnson", "email": "bob@example.com"},
     {"name": "Carol White", "email": "carol@example.com"},
 ]
+APPROVER_NAME_BY_EMAIL: Dict[str, str] = {a["email"]: a["name"] for a in APPROVERS}
 
-# ---------------- Helpers ----------------
+
+# =========================
+# Helpers
+# =========================
 def _esc(v: Any) -> str:
     return html.escape("" if v is None else str(v))
 
@@ -37,40 +62,77 @@ def _normalize_forms_all(forms_all: Any) -> List[Dict[str, Any]]:
 
 def _keys_for_row(rid: int) -> Dict[str, str]:
     return {
-        "client":   f"r_{rid}_client",     # hidden input (client text mirrored)
-        "account":  f"r_{rid}_account",    # hidden input (account text mirrored)
-        "email":    f"r_{rid}_email",      # requester email
-        "approver": f"r_{rid}_approver",   # approver email (value)
-        "mfa":      f"r_{rid}_mfa",        # mfa code
+        "client":   f"r_{rid}_client",   # hidden mirror of text
+        "account":  f"r_{rid}_account",  # hidden mirror of text
+        "email":    f"r_{rid}_email",    # requester email (input)
+        "approver": f"r_{rid}_approver", # approver email (dropdown value)
+        "mfa":      f"r_{rid}_mfa",      # MFA code (input)
     }
 
-def _extract_row(dicts: List[Dict[str, Any]], rid: int) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+def _extract_row(dicts: List[Dict[str, Any]], rid: int) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     k = _keys_for_row(rid)
-    client = account = email = approver = mfa = None
+    client = account = email = approver_email = mfa = None
     for d in dicts:
-        if k["client"]   in d and client   is None: client   = d.get(k["client"])
-        if k["account"]  in d and account  is None: account  = d.get(k["account"])
-        if k["email"]    in d and email    is None: email    = d.get(k["email"])
-        if k["approver"] in d and approver is None: approver = d.get(k["approver"])
-        if k["mfa"]      in d and mfa      is None: mfa      = d.get(k["mfa"])
-    return client, account, email, approver, mfa
+        if client is None and k["client"] in d:       client = d.get(k["client"])
+        if account is None and k["account"] in d:     account = d.get(k["account"])
+        if email is None and k["email"] in d:         email = d.get(k["email"])
+        if approver_email is None and k["approver"] in d:
+            approver_email = d.get(k["approver"])
+        if mfa is None and k["mfa"] in d:             mfa = d.get(k["mfa"])
+    approver_name = APPROVER_NAME_BY_EMAIL.get(approver_email) if approver_email else None
+    return client, account, email, approver_email, approver_name, mfa
+
+def _parse_region_from_lambda_arn(arn: str) -> str:
+    # arn:aws:lambda:<region>:<acct>:function:<name>
+    m = re.match(r"arn:aws:lambda:([a-z0-9-]+):\d+:function:.+", arn)
+    if not m:
+        raise ValueError(f"Not a Lambda ARN: {arn}")
+    return m.group(1)
+
+def _lambda_client_for_target(arn: str):
+    region = _parse_region_from_lambda_arn(arn)
+    if TARGET_INVOKE_ROLE_ARN:
+        sts = boto3.client("sts")
+        creds = sts.assume_role(RoleArn=TARGET_INVOKE_ROLE_ARN, RoleSessionName="WidgetInvoke")["Credentials"]
+        return boto3.client(
+            "lambda",
+            region_name=region,
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        )
+    return boto3.client("lambda", region_name=region)
 
 def _invoke_lambda(function_arn: str, payload: Dict[str, Any]) -> None:
-    # Use Event for async fire-and-forget; switch to RequestResponse for debugging
-    lambda_client.invoke(
+    client = _lambda_client_for_target(function_arn)
+    # Use "RequestResponse" while debugging to see results in CloudWatch logs.
+    client.invoke(
         FunctionName=function_arn,
         InvocationType="Event",
         Payload=json.dumps(payload).encode("utf-8"),
     )
 
-# ---------------- Renderers ----------------
+
+# =========================
+# Renderers
+# =========================
+def _banner(endpoint_arn: str) -> str:
+    # Helpful to visually confirm which lambda rendered the widget
+    return (
+        "<div style='padding:8px 12px;margin:0 0 10px 0;background:#f3f4f6;"
+        "border:1px solid #e5e7eb;border-radius:8px;'>"
+        f"<b>Serving from Lambda ARN:</b> <code>{_esc(endpoint_arn)}</code>"
+        "</div>"
+    )
+
 def _render_table(endpoint_arn: str) -> str:
-    out  = "<div style='padding:10px;'>"
-    out += "<h3 style='margin:0 0 8px 0;'>Client • Account • Requester Email • Approver • Request • MFA • Secret</h3>"
+    out  = _banner(endpoint_arn)
+    out += "<div style='padding:10px;'>"
+    out += "<h3>Client • Account • Requester Email • Approver • Request • MFA • Secret</h3>"
     out += "<table style='border-collapse:collapse;width:100%;max-width:1600px;'>"
     out += ("<thead><tr>"
             "<th style='text-align:left;padding:6px 8px;'>Client</th>"
-            "<th style='text-align:left;padding:6px 8px;'>Account Name</th>"
+            "<th style='text-align:left;padding:6px 8px;'>Account</th>"
             "<th style='text-align:left;padding:6px 8px;'>Requester Email</th>"
             "<th style='text-align:left;padding:6px 8px;'>Approver</th>"
             "<th style='text-align:left;padding:6px 8px;'>Request</th>"
@@ -86,21 +148,27 @@ def _render_table(endpoint_arn: str) -> str:
 
         out += "<tr>"
 
-        # Client (text) + hidden mirror
-        out += f"<td style='padding:6px 8px;'><span>{_esc(client)}</span>"
-        out += f"<input type='hidden' name='{_esc(k['client'])}' value='{_esc(client)}'/></td>"
+        # Client TEXT + hidden mirror (so it appears in forms.all)
+        out += "<td style='padding:6px 8px;'><span>{txt}</span>".format(txt=_esc(client))
+        out += "<input type='hidden' name='{name}' value='{val}'/></td>".format(
+            name=_esc(k["client"]), val=_esc(client)
+        )
 
-        # Account (text) + hidden mirror
-        out += f"<td style='padding:6px 8px;'><span>{_esc(account)}</span>"
-        out += f"<input type='hidden' name='{_esc(k['account'])}' value='{_esc(account)}'/></td>"
+        # Account TEXT + hidden mirror
+        out += "<td style='padding:6px 8px;'><span>{txt}</span>".format(txt=_esc(account))
+        out += "<input type='hidden' name='{name}' value='{val}'/></td>".format(
+            name=_esc(k["account"]), val=_esc(account)
+        )
 
-        # Requester Email
-        out += ("<td style='padding:6px 8px;'>"
-                "<input type='email' name='{name}' placeholder='name@example.com' "
-                "style='width:100%;max-width:260px;'/>"
-                "</td>".format(name=_esc(k["email"])))
+        # Requester Email (no 'required' to avoid blocking <cwdb-action>)
+        out += (
+            "<td style='padding:6px 8px;'>"
+            "<input type='email' name='{name}' placeholder='name@example.com' "
+            "style='width:100%;max-width:260px;'/>"
+            "</td>".format(name=_esc(k["email"]))
+        )
 
-        # Approver dropdown (name shown, email as value)
+        # Approver dropdown (name shown, email value)
         out += "<td style='padding:6px 8px;'><select name='{name}' style='width:100%;max-width:260px;'>".format(
             name=_esc(k["approver"])
         )
@@ -109,27 +177,29 @@ def _render_table(endpoint_arn: str) -> str:
             out += "<option value='{val}'>{label}</option>".format(val=_esc(a["email"]), label=_esc(a["name"]))
         out += "</select></td>"
 
-        # Request button (calls THIS Lambda; handler invokes request target)
+        # Request → POPUP verify (then confirm to send)
         out += "<td style='padding:6px 8px;'>"
         out += "<a class='btn btn-primary'>Request</a>"
         out += """
-<cwdb-action action="call" display="widget" endpoint="{endpoint}">
-  {{ "action": "request", "rowId": {rid} }}
+<cwdb-action action="call" display="popup" endpoint="{endpoint}">
+  {{ "action": "request_popup", "rowId": {rid} }}
 </cwdb-action>
 """.strip().format(endpoint=_esc(endpoint_arn), rid=rid)
         out += "</td>"
 
-        # MFA Code
-        out += ("<td style='padding:6px 8px;'>"
-                "<input name='{name}' placeholder='6-digit code' style='width:100%;max-width:160px;'/>"
-                "</td>".format(name=_esc(k["mfa"])))
+        # MFA input
+        out += (
+            "<td style='padding:6px 8px;'>"
+            "<input name='{name}' placeholder='6-digit code' style='width:100%;max-width:160px;'/>"
+            "</td>".format(name=_esc(k["mfa"]))
+        )
 
-        # Secret button (calls THIS Lambda; handler invokes secret target)
+        # Secret → POPUP verify (then confirm to send)
         out += "<td style='padding:6px 8px;'>"
         out += "<a class='btn'>Secret</a>"
         out += """
-<cwdb-action action="call" display="widget" endpoint="{endpoint}">
-  {{ "action": "secret", "rowId": {rid} }}
+<cwdb-action action="call" display="popup" endpoint="{endpoint}">
+  {{ "action": "secret_popup", "rowId": {rid} }}
 </cwdb-action>
 """.strip().format(endpoint=_esc(endpoint_arn), rid=rid)
         out += "</td>"
@@ -140,14 +210,53 @@ def _render_table(endpoint_arn: str) -> str:
     out += "</div>"
     return out
 
-def _render_ok(title: str, details: Dict[str, Any], endpoint_arn: str) -> str:
-    out  = "<div style='padding:10px;'>"
-    out += f"<h3 style='margin:0 0 8px 0;'>{_esc(title)}</h3>"
+def _render_verify_popup(kind: str, rid: int,
+                         client: Optional[str], account: Optional[str],
+                         email: Optional[str], approver_email: Optional[str],
+                         approver_name: Optional[str], mfa: Optional[str],
+                         endpoint_arn: str) -> str:
+    title = "Verify Request" if kind == "request" else "Verify Secret"
+    out  = "<div style='padding:12px;max-width:640px;'>"
+    out += "<h3 style='margin:0 0 8px 0;'>{}</h3>".format(_esc(title))
     out += "<div style='line-height:1.7;'>"
+    out += "<div><b>Client</b>: {}</div>".format(_esc(client))
+    out += "<div><b>Account</b>: {}</div>".format(_esc(account))
+    out += "<div><b>Requester Email</b>: {}</div>".format(_esc(email))
+    if approver_email:
+        shown = "{} ({})".format(approver_name or "", approver_email) if approver_name else approver_email
+        out += "<div><b>Approver</b>: {}</div>".format(_esc(shown))
+    else:
+        out += "<div><b>Approver</b>: (none)</div>"
+    out += "<div><b>MFA Code</b>: {}</div>".format(_esc(mfa))
+    out += "</div><div style='height:10px;'></div>"
+
+    # Confirm -> call this widget lambda to perform the actual invoke
+    confirm_action = "request_confirm" if kind == "request" else "secret_confirm"
+    out += "<a class='btn btn-primary' style='margin-right:8px;'>Confirm</a>"
+    out += """
+<cwdb-action action="call" display="widget" endpoint="{endpoint}">
+  {{ "action": "{confirm}", "rowId": {rid} }}
+</cwdb-action>
+""".strip().format(endpoint=_esc(endpoint_arn), confirm=_esc(confirm_action), rid=rid)
+
+    # Close -> go back to table
+    out += "<a class='btn'>Close</a>"
+    out += """
+<cwdb-action action="call" display="widget" endpoint="{endpoint}">
+  {{ "action": "back" }}
+</cwdb-action>
+""".strip().format(endpoint=_esc(endpoint_arn))
+
+    out += "</div>"
+    return out
+
+def _render_ok(title: str, details: Dict[str, Any], endpoint_arn: str) -> str:
+    out  = _banner(endpoint_arn)
+    out += "<div style='padding:12px;'>"
+    out += "<h3 style='margin:0 0 8px 0;'>{}</h3>".format(_esc(title))
     for k, v in details.items():
-        out += f"<div><b>{_esc(k)}</b>: <code>{_esc(v)}</code></div>"
-    out += "</div><div style='height:8px;'></div>"
-    out += "<a class='btn'>Back</a>"
+        out += "<div><b>{}</b>: <code>{}</code></div>".format(_esc(k), _esc(v))
+    out += "<div style='height:8px;'></div><a class='btn'>Back</a>"
     out += """
 <cwdb-action action="call" display="widget" endpoint="{endpoint}">
   {{ "action": "back" }}
@@ -156,16 +265,19 @@ def _render_ok(title: str, details: Dict[str, Any], endpoint_arn: str) -> str:
     out += "</div>"
     return out
 
-# ---------------- Entrypoint ----------------
+
+# =========================
+# Entry point
+# =========================
 def lambda_handler(event: Dict[str, Any], context: Any):
-    # Docs for the widget’s “Get documentation” button
+    # Docs panel
     if event.get("describe"):
         return {
             "markdown": (
-                "### Dynamic Request/Secret Widget\n"
-                "- Client & Account are text but also mirrored as hidden inputs so they reach forms.all.\n"
-                "- Request invokes the Request Lambda; Secret invokes the Secret Lambda.\n"
-                "- This Lambda renders HTML; target Lambdas do the work."
+                "### Dynamic Request/Secret Widget (cross-region proxy)\n"
+                "- Dashboard and THIS lambda must be in the same account/region.\n"
+                "- Buttons call this lambda; this lambda invokes remote target lambdas.\n"
+                "- Text columns (Client/Account) are mirrored as hidden inputs so they arrive in forms.all."
             )
         }
 
@@ -176,30 +288,38 @@ def lambda_handler(event: Dict[str, Any], context: Any):
     rid     = params.get("rowId")
     endpoint_arn = getattr(context, "invoked_function_arn", "")
 
-    # Initial/back → render
+    # Initial/back -> render table
     if not action or action == "back" or rid is None:
         return _render_table(endpoint_arn)
 
-    # Read the clicked row’s values from forms.all
+    # Extract row values from forms
     dicts = _normalize_forms_all(forms)
-    client, account, email, approver, mfa = _extract_row(dicts, rid)
+    client, account, email, approver_email, approver_name, mfa = _extract_row(dicts, rid)
 
-    if action == "request":
+    # POPUP verification flows
+    if action == "request_popup":
+        return _render_verify_popup("request", rid, client, account, email, approver_email, approver_name, mfa, endpoint_arn)
+    if action == "secret_popup":
+        return _render_verify_popup("secret", rid, client, account, email, approver_email, approver_name, mfa, endpoint_arn)
+
+    # Confirm → actually invoke target lambdas (cross-region/account allowed via IAM)
+    if action == "request_confirm":
         payload = {
             "client": client,
             "account": account,
             "requester_email": email,
-            "approver_email": approver,
+            "approver_email": approver_email,
+            "mfa_code": mfa,
         }
         _invoke_lambda(TARGET_REQUEST_LAMBDA_ARN, payload)
         return _render_ok("Request sent", payload, endpoint_arn)
 
-    if action == "secret":
+    if action == "secret_confirm":
         payload = {
             "client": client,
             "account": account,
             "requester_email": email,
-            "approver_email": approver,
+            "approver_email": approver_email,
             "mfa_code": mfa,
         }
         _invoke_lambda(TARGET_SECRET_LAMBDA_ARN, payload)
