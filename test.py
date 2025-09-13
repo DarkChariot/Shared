@@ -74,8 +74,7 @@ def _render_table(endpoint_arn):
         # Request Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
         out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "request", "rowId": {rid}}}</cwdb-action>'
-        out += "</td>"
-        
+        out += "</td>"     
         # MFA Code (input field)
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
         out += f"<input name='mfa_{rid}' placeholder='123456' style='width:100%;'/></td>"
