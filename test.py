@@ -119,6 +119,8 @@ def lambda_handler(event, context):
     
     if action == "request" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
+        # Debug: show what we received
+        debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
             "client": client,
             "account": account,
@@ -127,7 +129,7 @@ def lambda_handler(event, context):
             "mfa_code": mfa
         }
         _invoke_lambda(TARGET_REQUEST_LAMBDA_ARN, payload)
-        return _render_success("Request Sent Successfully!", payload)
+        return debug_info + _render_success("Request Sent Successfully!", payload)
     
     if action == "secret" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
