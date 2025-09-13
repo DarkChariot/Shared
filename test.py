@@ -2,115 +2,153 @@
 import html
 
 # --------------------------
-# Sample rows
+# Sample rows (prefill Client + Account; user supplies the rest)
 # --------------------------
-# Pre-fill only CLIENT and USER if you want. Email starts blank.
 ROWS = [
-    {"id": 1001, "client": "Acme Corp",  "user": "jsmith"},
-    {"id": 1002, "client": "Globex LLC", "user": "adoe"},
-    {"id": 1003, "client": "Initech",    "user": "mpeter"},
+    {"id": 3001, "client": "TestClient A", "account": "TestUserA"},
+    {"id": 3002, "client": "TestClient B", "account": "TestUserB"},
+    {"id": 3003, "client": "TestClient C", "account": "TestUserC"},
 ]
 
-# Static approvers — names shown, emails hidden as values
+# Approvers are the same for all rows:
+# Visible to user: name
+# Submitted value: email (hidden)
 APPROVERS = [
     {"name": "Alice Smith", "email": "alice@example.com"},
     {"name": "Bob Johnson", "email": "bob@example.com"},
     {"name": "Carol White", "email": "carol@example.com"},
 ]
-
 APPROVER_NAME_BY_EMAIL = {a["email"]: a["name"] for a in APPROVERS}
 
 
 # --------------------------
 # Helpers
 # --------------------------
-def _esc(s) -> str:
-    return html.escape("" if s is None else str(s))
+def _esc(v) -> str:
+    return html.escape("" if v is None else str(v))
 
-def _normalize(forms_all):
+def _normalize_forms_all(forms_all):
+    """Normalize widgetContext.forms.all -> list[dict]."""
     if isinstance(forms_all, dict):
         return [forms_all]
     if isinstance(forms_all, list):
         return [d for d in forms_all if isinstance(d, dict)]
     return []
 
-def _get_row_values(dicts, rid):
-    """Extract CLIENT, USER, EMAIL (typed by user), APPROVER (email hidden value)."""
-    k_client   = f"r_{rid}_client"
-    k_user     = f"r_{rid}_user"
-    k_email    = f"r_{rid}_email"
-    k_approver = f"r_{rid}_approver"
+def _keys_for_row(rid: int):
+    """Namespaced input names per row."""
+    return {
+        "client":   f"r_{rid}_client",
+        "account":  f"r_{rid}_account",
+        "email":    f"r_{rid}_email",
+        "approver": f"r_{rid}_approver",  # dropdown value = approver email
+        "mfa":      f"r_{rid}_mfa",
+    }
 
-    client = user = email = approver_email = None
+def _extract_row_values(dicts, rid: int):
+    """
+    Pull this row's values from forms['all'].
+    Returns: client, account, email, approver_email, approver_name, mfa
+    """
+    k = _keys_for_row(rid)
+    client = account = email = approver_email = mfa = None
+
     for d in dicts:
-        if k_client in d:   client         = d.get(k_client)
-        if k_user   in d:   user           = d.get(k_user)
-        if k_email  in d:   email          = d.get(k_email)
-        if k_approver in d: approver_email = d.get(k_approver)
+        if k["client"]   in d: client        = d.get(k["client"])
+        if k["account"]  in d: account       = d.get(k["account"])
+        if k["email"]    in d: email         = d.get(k["email"])
+        if k["approver"] in d: approver_email = d.get(k["approver"])
+        if k["mfa"]      in d: mfa           = d.get(k["mfa"])
 
     approver_name = APPROVER_NAME_BY_EMAIL.get(approver_email) if approver_email else None
-    return client, user, email, approver_email, approver_name
+    return client, account, email, approver_email, approver_name, mfa
 
 
 # --------------------------
-# Rendering
+# Renderers
 # --------------------------
-def _render_confirm(endpoint, rid, client, user, email, approver_email, approver_name):
+def _render_table(endpoint_arn: str) -> str:
+    """
+    Main widget view: columns
+    Client | Account Name | Requester Email | Approver | Request | MFA Code | Secret
+    """
     out  = "<div style='padding:10px;'>"
-    out += f"<h3>Email Saved (Row {rid})</h3>"
-    out += f"<p><b>CLIENT</b> = <code>{_esc(client)}</code></p>"
-    out += f"<p><b>USER</b>   = <code>{_esc(user)}</code></p>"
-    out += f"<p><b>EMAIL</b>  = <code>{_esc(email)}</code></p>"
-    if approver_email:
-        shown = f"{approver_name} ({approver_email})" if approver_name else approver_email
-        out += f"<p><b>APPROVER</b> = <code>{_esc(shown)}</code></p>"
-    out += "<div style='height:8px;'></div>"
-    out += "<a class='btn'>Back</a>"
-    out += f"""
-<cwdb-action action="call" display="widget" endpoint="{_esc(endpoint)}">
-  {{ "action": "back" }}
-</cwdb-action>
-""".strip()
-    out += "</div>"
-    return out
+    out += "<h3 style='margin:0 0 8px 0;'>Client • Account • Email • Approver • Request • MFA • Secret</h3>"
+    out += "<table style='border-collapse:collapse;width:100%;max-width:1600px;'>"
+    out += (
+        "<thead><tr>"
+        "<th style='text-align:left;padding:6px 8px;'>Client</th>"
+        "<th style='text-align:left;padding:6px 8px;'>Account Name</th>"
+        "<th style='text-align:left;padding:6px 8px;'>Requester Email</th>"
+        "<th style='text-align:left;padding:6px 8px;'>Approver</th>"
+        "<th style='text-align:left;padding:6px 8px;'>Request</th>"
+        "<th style='text-align:left;padding:6px 8px;'>MFA Code</th>"
+        "<th style='text-align:left;padding:6px 8px;'>Secret</th>"
+        "</tr></thead><tbody>"
+    )
 
-def _render_table(endpoint):
-    out  = "<div style='padding:10px;'>"
-    out += "<h3>CLIENT • USER • APPROVER • EMAIL</h3>"
-    out += "<table style='border-collapse:collapse;width:100%;max-width:1200px;'>"
-    out += "<thead><tr>"
-    out += "<th>Row</th><th>CLIENT</th><th>USER</th><th>Approver</th><th>EMAIL</th><th>Action</th>"
-    out += "</tr></thead><tbody>"
-
-    for r in ROWS:
-        rid, client, user = r["id"], r["client"], r["user"]
-        n_client, n_user  = f"r_{rid}_client", f"r_{rid}_user"
-        n_email, n_approver = f"r_{rid}_email", f"r_{rid}_approver"
+    for r in ROWS if False else ROWS:  # keep simple; edit sentinel if you template
+        rid     = r["id"]
+        client  = r.get("client", "")
+        account = r.get("account", "")
+        k       = _keys_for_row(rid)
 
         out += "<tr>"
 
-        # Row label
-        out += f"<td><b>{_esc(rid)}</b></td>"
+        # Client (prefilled)
+        out += (
+            f"<td style='padding:6px 8px;'>"
+            f"<input name='{_esc(k['client'])}' value='{_esc(client)}' "
+            f"placeholder='Client' style='width:100%;max-width:220px;'/>"
+            f"</td>"
+        )
 
-        # CLIENT + USER pre-filled
-        out += f"<td><input name='{_esc(n_client)}' value='{_esc(client)}' placeholder='CLIENT'/></td>"
-        out += f"<td><input name='{_esc(n_user)}' value='{_esc(user)}' placeholder='USER account'/></td>"
+        # Account Name (prefilled)
+        out += (
+            f"<td style='padding:6px 8px;'>"
+            f"<input name='{_esc(k['account'])}' value='{_esc(account)}' "
+            f"placeholder='Account Name' style='width:100%;max-width:220px;'/>"
+            f"</td>"
+        )
 
-        # Approver dropdown
-        out += f"<td><select name='{_esc(n_approver)}'>"
+        # Requester Email (user types)
+        out += (
+            f"<td style='padding:6px 8px;'>"
+            f"<input type='email' name='{_esc(k['email'])}' "
+            f"placeholder='name@example.com' required style='width:100%;max-width:260px;'/>"
+            f"</td>"
+        )
+
+        # Approver (dropdown: name shown, email as value)
+        out += f"<td style='padding:6px 8px;'><select name='{_esc(k['approver'])}' style='width:100%;max-width:260px;'>"
         out += "<option value='' selected>-- select approver --</option>"
         for a in APPROVERS:
             out += f"<option value='{_esc(a['email'])}'>{_esc(a['name'])}</option>"
         out += "</select></td>"
 
-        # EMAIL field is always blank (user types it in)
-        out += f"<td><input type='email' name='{_esc(n_email)}' placeholder='name@example.com' required/></td>"
-
-        # Action button
-        out += "<td><a class='btn btn-primary'>Save Email</a>"
+        # Request button → calls Lambda in the widget area
+        out += "<td style='padding:6px 8px;'>"
+        out += "<a class='btn btn-primary'>Request</a>"
         out += f"""
-<cwdb-action action="call" display="widget" endpoint="{_esc(endpoint)}">
-  {{ "action": "save_email", "rowId": {rid} }}
+<cwdb-action action="call" display="widget" endpoint="{_esc(endpoint_arn)}">
+  {{ "action": "request", "rowId": {rid} }}
+</cwdb-action>
+""".strip()
+        out += "</td>"
+
+        # MFA Code (user types)
+        out += (
+            f"<td style='padding:6px 8px;'>"
+            f"<input name='{_esc(k['mfa'])}' placeholder='6-digit code' style='width:100%;max-width:160px;'/>"
+            f"</td>"
+        )
+
+        # Secret button → opens popup for this row
+        out += "<td style='padding:6px 8px;'>"
+        out += "<a class='btn'>Secret</a>"
+        out += f"""
+<cwdb-action action="call" display="popup" endpoint="{_esc(endpoint_arn)}">
+  {{ "action": "secret_popup", "rowId": {rid} }}
 </cwdb-action>
 """.strip()
         out += "</td>"
@@ -122,17 +160,80 @@ def _render_table(endpoint):
     return out
 
 
+def _render_request_confirmation(endpoint_arn: str, rid: int,
+                                 client: str, account: str, email: str,
+                                 approver_email: str | None, approver_name: str | None) -> str:
+    """
+    After clicking 'Request', show a confirmation summary in the widget.
+    (We intentionally do not require MFA for Request; adjust if needed.)
+    """
+    out  = "<div style='padding:10px;'>"
+    out += f"<h3 style='margin:0 0 8px 0;'>Request Submitted (Row {rid})</h3>"
+    out += f"<p><b>Client</b> = <code>{_esc(client)}</code></p>"
+    out += f"<p><b>Account</b> = <code>{_esc(account)}</code></p>"
+    out += f"<p><b>Requester Email</b> = <code>{_esc(email)}</code></p>"
+    if approver_email:
+        shown = f"{approver_name} ({approver_email})" if approver_name else approver_email
+        out += f"<p><b>Approver</b> = <code>{_esc(shown)}</code></p>"
+
+    out += "<div style='height:8px;'></div>"
+    out += "<a class='btn'>Back</a>"
+    out += f"""
+<cwdb-action action="call" display="widget" endpoint="{_esc(endpoint_arn)}">
+  {{ "action": "back" }}
+</cwdb-action>
+""".strip()
+    out += "</div>"
+    return out
+
+
+def _render_secret_popup(rid: int,
+                         client: str, account: str, email: str,
+                         approver_email: str | None, approver_name: str | None,
+                         mfa: str | None) -> str:
+    """
+    Popup content for 'Secret' button (display='popup').
+    """
+    out  = "<div style='padding:10px; max-width: 560px;'>"
+    out += f"<h3 style='margin:0 0 8px 0;'>Secret Details (Row {rid})</h3>"
+    out += "<div style='line-height:1.7;'>"
+    out += f"<div><b>Client</b>: {_esc(client)}</div>"
+    out += f"<div><b>Account</b>: {_esc(account)}</div>"
+    out += f"<div><b>Requester Email</b>: {_esc(email)}</div>"
+    if approver_email:
+        shown = f"{approver_name} ({approver_email})" if approver_name else approver_email
+        out += f"<div><b>Approver</b>: {_esc(shown)}</div>"
+    out += f"<div><b>MFA Code</b>: {_esc(mfa)}</div>"
+    out += "</div>"
+    out += "</div>"
+    return out
+
+
 # --------------------------
 # Lambda entry
 # --------------------------
 def lambda_handler(event, context):
+    """
+    CloudWatch Custom Widget Lambda:
+
+    Columns:
+      Client | Account Name | Requester Email | Approver | Request | MFA Code | Secret
+
+    Actions:
+      - 'request'      -> capture Client, Account, Requester Email, Approver (email) for that row
+      - 'secret_popup' -> open a popup showing Client, Account, Requester Email, Approver, MFA code
+      - 'back'         -> re-render the table
+      - 'describe'     -> widget docs panel
+    """
+    # Docs panel
     if event.get("describe"):
         return {
             "markdown": (
-                "### Client/User/Approver/Email Widget\n"
-                "- User types CLIENT, USER, and EMAIL directly.\n"
-                "- Approver dropdown shows **names**, submits **emails** as values.\n"
-                "- Clicking **Save Email** sends `{action:'save_email', rowId:<RID>}` in params and all inputs in forms.all.\n"
+                "### Client/Account/Email/Approver/Request/MFA/Secret Widget\n"
+                "- **Request** button re-invokes Lambda (display=widget) and shows a summary using current inputs.\n"
+                "- **Secret** button opens a **popup** (display=popup) with row details (including MFA Code).\n"
+                "- Approver dropdown shows names; submitted value is the approver's **email**.\n"
+                "- Inputs arrive in `widgetContext.forms.all`; button JSON arrives in `widgetContext.params`.\n"
             )
         }
 
@@ -142,12 +243,21 @@ def lambda_handler(event, context):
     allvals = forms.get("all") or {}
     action  = params.get("action")
     rid     = params.get("rowId")
-    endpoint = getattr(context, "invoked_function_arn", "")
 
-    if action == "save_email" and rid is not None:
-        dicts = _normalize(allvals)
-        client, user, email, approver_email, approver_name = _get_row_values(dicts, rid)
-        return _render_confirm(endpoint, rid, client, user, email, approver_email, approver_name)
+    endpoint_arn = getattr(context, "invoked_function_arn", "")
 
-    # Initial or Back
-    return _render_table(endpoint)
+    # Normalize inputs for easy extraction
+    dicts = _normalize_forms_all(allvals)
+
+    # Handle Request (widget display)
+    if action == "request" and rid is not None:
+        client, account, email, approver_email, approver_name, _mfa = _extract_row_values(dicts, rid)
+        return _render_request_confirmation(endpoint_arn, rid, client, account, email, approver_email, approver_name)
+
+    # Handle Secret (popup display)
+    if action == "secret_popup" and rid is not None:
+        client, account, email, approver_email, approver_name, mfa = _extract_row_values(dicts, rid)
+        return _render_secret_popup(rid, client, account, email, approver_email, approver_name, mfa)
+
+    # Back or initial load -> render the table
+    return _render_table(endpoint_arn)
