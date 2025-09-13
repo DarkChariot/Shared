@@ -1,4 +1,3 @@
-import html
 import json
 import boto3
 from typing import Any, Dict, List
@@ -18,9 +17,6 @@ APPROVERS = [
 
 TARGET_REQUEST_LAMBDA_ARN = "arn:aws:lambda:us-east-1:123456789012:function:request-handler"
 TARGET_SECRET_LAMBDA_ARN = "arn:aws:lambda:us-east-1:123456789012:function:secret-handler"
-
-def _esc(text):
-    return html.escape(str(text or ""))
 
 def _get_form_data(forms, rid):
     client = forms.get(f"client_{rid}", "")
@@ -56,12 +52,12 @@ def _render_table(endpoint_arn):
         out += "<tr>"
         
         # Client (hardcoded)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>{_esc(row['client'])}"
-        out += f"<input type='hidden' name='client_{rid}' value='{_esc(row['client'])}'/></td>"
+        out += f"<td style='padding:8px;border:1px solid #ddd;'>{row['client']}"
+        out += f"<input type='hidden' name='client_{rid}' value='{row['client']}'/></td>"
         
         # Account Name (hardcoded)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>{_esc(row['account'])}"
-        out += f"<input type='hidden' name='account_{rid}' value='{_esc(row['account'])}'/></td>"
+        out += f"<td style='padding:8px;border:1px solid #ddd;'>{row['account']}"
+        out += f"<input type='hidden' name='account_{rid}' value='{row['account']}'/></td>"
         
         # Requester Email (input field)
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
@@ -72,12 +68,12 @@ def _render_table(endpoint_arn):
         out += f"<select name='approver_{rid}' style='width:100%;'>"
         out += "<option value=''>-- Select Approver --</option>"
         for approver in APPROVERS:
-            out += f"<option value='{_esc(approver['email'])}'>{_esc(approver['name'])}</option>"
+            out += f"<option value='{approver['email']}'>{approver['name']}</option>"
         out += "</select></td>"
         
         # Request Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{_esc(endpoint_arn)}">{{"action": "request", "rowId": {rid}}}</cwdb-action>'
+        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "request", "rowId": {rid}}}</cwdb-action>'
         out += "</td>"
         
         # MFA Code (input field)
@@ -86,7 +82,7 @@ def _render_table(endpoint_arn):
         
         # Secret Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{_esc(endpoint_arn)}">{{"action": "secret", "rowId": {rid}}}</cwdb-action>'
+        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "secret", "rowId": {rid}}}</cwdb-action>'
         out += "</td>"
         
         out += "</tr>"
@@ -96,10 +92,10 @@ def _render_table(endpoint_arn):
 
 def _render_success(message, data):
     out = "<div style='padding:20px;'>"
-    out += f"<h3 style='color:green;'>{_esc(message)}</h3>"
+    out += f"<h3 style='color:green;'>{message}</h3>"
     out += "<div style='background:#f0f8f0;padding:10px;border-radius:5px;'>"
     for key, value in data.items():
-        out += f"<div><b>{_esc(key)}:</b> {_esc(value)}</div>"
+        out += f"<div><b>{key}:</b> {value}</div>"
     out += "</div>"
     out += "<div style='margin-top:10px;'>"
     out += '<a class="btn">Back to Dashboard</a><cwdb-action action="call" endpoint="">{"action": "back"}</cwdb-action>'
