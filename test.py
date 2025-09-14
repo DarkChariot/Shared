@@ -49,17 +49,15 @@ def _render_table(endpoint_arn):
 
     for row in ROWS:
         rid = row["id"]
-        client_val = row['client']
-        account_val = row['account']
         out += "<tr>"
         
         # Client (hardcoded)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>{client_val}"
-        out += f"<input type='hidden' name='client_{rid}' value='{client_val}'/></td>"
+        out += f"<td style='padding:8px;border:1px solid #ddd;'>{row['client']}"
+        out += f"<input type='hidden' name='client_{rid}' value='{row['client']}'/></td>"
         
         # Account Name (hardcoded)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>{account_val}"
-        out += f"<input type='hidden' name='account_{rid}' value='{account_val}'/></td>"
+        out += f"<td style='padding:8px;border:1px solid #ddd;'>{row['account']}"
+        out += f"<input type='hidden' name='account_{rid}' value='{row['account']}'/></td>"
         
         # Requester Email (input field)
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
@@ -75,7 +73,7 @@ def _render_table(endpoint_arn):
         
         # Request Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{TARGET_REQUEST_LAMBDA_ARN}">{{"client": "{client_val}", "account": "{account_val}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
+        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "request", "rowId": {rid}}}</cwdb-action>'
         out += "</td>"
         
         # MFA Code (input field)
@@ -84,7 +82,7 @@ def _render_table(endpoint_arn):
         
         # Secret Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{TARGET_SECRET_LAMBDA_ARN}">{{"client": "{client_val}", "account": "{account_val}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
+        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "secret", "rowId": {rid}}}</cwdb-action>'
         out += "</td>"
         
         out += "</tr>"
@@ -100,7 +98,7 @@ def _render_success(message, data):
         out += f"<div><b>{key}:</b> {value}</div>"
     out += "</div>"
     out += "<div style='margin-top:10px;'>"
-    out += '<a class="btn">Back to Dashboard</a><cwdb-action action="call" endpoint="">{"action": "back"}</cwdb-action>'
+    out += f'<a class="btn">Back to Dashboard</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "back"}}</cwdb-action>'
     out += "</div></div>"
     return out
 
@@ -122,7 +120,6 @@ def lambda_handler(event, context):
     
     if action == "request" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
-        debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
             "client": client,
             "account": account,
@@ -131,11 +128,10 @@ def lambda_handler(event, context):
             "mfa_code": mfa
         }
         _invoke_lambda(TARGET_REQUEST_LAMBDA_ARN, payload)
-        return debug_info + _render_success("Request Sent Successfully!", payload)
+        return _render_success("Request Sent Successfully!", payload)
     
     if action == "secret" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
-        debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
             "client": client,
             "account": account,
@@ -144,6 +140,6 @@ def lambda_handler(event, context):
             "mfa_code": mfa
         }
         _invoke_lambda(TARGET_SECRET_LAMBDA_ARN, payload)
-        return debug_info + _render_success("Secret Request Sent Successfully!", payload)
+        return _render_success("Secret Request Sent Successfully!", payload)
     
     return _render_table(endpoint_arn)
