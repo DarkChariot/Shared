@@ -46,13 +46,13 @@ def lambda_handler(event, context):
         }
         try:
             response = boto3.client('lambda').invoke(
-                FunctionName=REQUEST_LAMBDA_ARN,
+                FunctionName="showme",
                 InvocationType='RequestResponse',
                 Payload=json.dumps(payload)
             )
             result = json.loads(response['Payload'].read())
         except Exception as e:
-            result = {"error": str(e)}
+            result = {"error": f"Lambda invoke failed: {str(e)}"}
         
         return debug_info + f"<div style='padding:20px;'><h3 style='color:green;'>Request Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
     
@@ -69,13 +69,13 @@ def lambda_handler(event, context):
         }
         try:
             response = boto3.client('lambda').invoke(
-                FunctionName=SECRET_LAMBDA_ARN,
+                FunctionName="showme",
                 InvocationType='RequestResponse',
                 Payload=json.dumps(payload)
             )
             result = json.loads(response['Payload'].read())
         except Exception as e:
-            result = {"error": str(e)}
+            result = {"error": f"Lambda invoke failed: {str(e)}"}
         
         return debug_info + f"<div style='padding:20px;'><h3 style='color:green;'>Secret Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
     
