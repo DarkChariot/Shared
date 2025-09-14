@@ -33,10 +33,7 @@ def lambda_handler(event, context):
     action = params.get("action")
     rid = params.get("rowId")
     
-    if action == "request" and rid:
-        # Debug: show what we received
-        debug_info = f"<div style='background:yellow;padding:5px;'>DEBUG - Action: {action}, RID: {rid}, Forms: {forms}</div>"
-        
+    if action == "confirm_request" and rid:
         payload = {
             "client": forms.get(f"client_{rid}", ""),
             "account": forms.get(f"account_{rid}", ""),
@@ -54,12 +51,39 @@ def lambda_handler(event, context):
         except Exception as e:
             result = {"error": f"Lambda invoke failed: {str(e)}"}
         
-        return debug_info + f"<div style='padding:20px;'><h3 style='color:green;'>Request Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
+        return f"<div style='padding:20px;'><h3 style='color:green;'>Request Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
+    
+    if action == "request" and rid:
+        payload = {
+            "client": forms.get(f"client_{rid}", ""),
+            "account": forms.get(f"account_{rid}", ""),
+            "requester_email": forms.get(f"requester_{rid}", ""),
+            "approver_email": forms.get(f"approver_{rid}", ""),
+            "mfa_code": forms.get(f"mfa_{rid}", "")
+        }
+        return f"<div style='padding:20px;'><h3>Confirm Request</h3><div style='background:#f9f9f9;padding:15px;border:1px solid #ddd;'><h4>Please confirm the following details:</h4><p><b>Client:</b> {payload['client']}</p><p><b>Account:</b> {payload['account']}</p><p><b>Requester Email:</b> {payload['requester_email']}</p><p><b>Approver Email:</b> {payload['approver_email']}</p><p><b>MFA Code:</b> {payload['mfa_code']}</p></div><div style='margin-top:15px;'><a class='btn btn-success' style='margin-right:10px;'>Confirm Request</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"confirm_request\", \"rowId\": {rid}}}</cwdb-action><a class='btn btn-secondary'>Cancel</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div></div>"
+    
+    if action == "confirm_secret" and rid:
+        payload = {
+            "client": forms.get(f"client_{rid}", ""),
+            "account": forms.get(f"account_{rid}", ""),
+            "requester_email": forms.get(f"requester_{rid}", ""),
+            "approver_email": forms.get(f"approver_{rid}", ""),
+            "mfa_code": forms.get(f"mfa_{rid}", "")
+        }
+        try:
+            response = boto3.client('lambda').invoke(
+                FunctionName="showme",
+                InvocationType='RequestResponse',
+                Payload=json.dumps(payload)
+            )
+            result = json.loads(response['Payload'].read())
+        except Exception as e:
+            result = {"error": f"Lambda invoke failed: {str(e)}"}
+        
+        return f"<div style='padding:20px;'><h3 style='color:green;'>Secret Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
     
     if action == "secret" and rid:
-        # Debug: show what we received
-        debug_info = f"<div style='background:yellow;padding:5px;'>DEBUG - Action: {action}, RID: {rid}, Forms: {forms}</div>"
-        
         payload = {
             "client": forms.get(f"client_{rid}", ""),
             "account": forms.get(f"account_{rid}", ""),
@@ -67,17 +91,7 @@ def lambda_handler(event, context):
             "approver_email": forms.get(f"approver_{rid}", ""),
             "mfa_code": forms.get(f"mfa_{rid}", "")
         }
-        try:
-            response = boto3.client('lambda').invoke(
-                FunctionName="showme",
-                InvocationType='RequestResponse',
-                Payload=json.dumps(payload)
-            )
-            result = json.loads(response['Payload'].read())
-        except Exception as e:
-            result = {"error": f"Lambda invoke failed: {str(e)}"}
-        
-        return debug_info + f"<div style='padding:20px;'><h3 style='color:green;'>Secret Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
+        return f"<div style='padding:20px;'><h3>Confirm Secret Request</h3><div style='background:#f9f9f9;padding:15px;border:1px solid #ddd;'><h4>Please confirm the following details:</h4><p><b>Client:</b> {payload['client']}</p><p><b>Account:</b> {payload['account']}</p><p><b>Requester Email:</b> {payload['requester_email']}</p><p><b>Approver Email:</b> {payload['approver_email']}</p><p><b>MFA Code:</b> {payload['mfa_code']}</p></div><div style='margin-top:15px;'><a class='btn btn-success' style='margin-right:10px;'>Confirm Secret</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"confirm_secret\", \"rowId\": {rid}}}</cwdb-action><a class='btn btn-secondary'>Cancel</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div></div>"
     
 
     
