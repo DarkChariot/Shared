@@ -73,7 +73,7 @@ def _render_table(endpoint_arn):
         
         # Request Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{TARGET_REQUEST_LAMBDA_ARN}">{{"client": "TestClient", "account": "TestAccount", "requester_email": "test@example.com", "approver_email": "alice@example.com", "mfa_code": "123456"}}</cwdb-action>'
+        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{TARGET_REQUEST_LAMBDA_ARN}">{{"client": "{row['client']}", "account": "{row['account']}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
         out += "</td>"     
         # MFA Code (input field)
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
@@ -81,7 +81,7 @@ def _render_table(endpoint_arn):
         
         # Secret Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{TARGET_SECRET_LAMBDA_ARN}">{{"client": "TestClient", "account": "TestAccount", "requester_email": "test@example.com", "approver_email": "alice@example.com", "mfa_code": "123456"}}</cwdb-action>'
+        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{TARGET_SECRET_LAMBDA_ARN}">{{"client": "{row['client']}", "account": "{row['account']}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
         out += "</td>"
         
         out += "</tr>"
