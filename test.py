@@ -33,6 +33,46 @@ def lambda_handler(event, context):
     action = params.get("action")
     rid = params.get("rowId")
     
+    if action == "request" and rid:
+        payload = {
+            "client": forms.get(f"client_{rid}", ""),
+            "account": forms.get(f"account_{rid}", ""),
+            "requester_email": forms.get(f"requester_{rid}", ""),
+            "approver_email": forms.get(f"approver_{rid}", ""),
+            "mfa_code": forms.get(f"mfa_{rid}", "")
+        }
+        try:
+            response = boto3.client('lambda').invoke(
+                FunctionName=REQUEST_LAMBDA_ARN,
+                InvocationType='RequestResponse',
+                Payload=json.dumps(payload)
+            )
+            result = json.loads(response['Payload'].read())
+        except Exception as e:
+            result = {"error": str(e)}
+        
+        return f"<div style='padding:20px;'><h3 style='color:green;'>Request Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
+    
+    if action == "secret" and rid:
+        payload = {
+            "client": forms.get(f"client_{rid}", ""),
+            "account": forms.get(f"account_{rid}", ""),
+            "requester_email": forms.get(f"requester_{rid}", ""),
+            "approver_email": forms.get(f"approver_{rid}", ""),
+            "mfa_code": forms.get(f"mfa_{rid}", "")
+        }
+        try:
+            response = boto3.client('lambda').invoke(
+                FunctionName=SECRET_LAMBDA_ARN,
+                InvocationType='RequestResponse',
+                Payload=json.dumps(payload)
+            )
+            result = json.loads(response['Payload'].read())
+        except Exception as e:
+            result = {"error": str(e)}
+        
+        return f"<div style='padding:20px;'><h3 style='color:green;'>Secret Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
+    
 
     
     # Render table
@@ -45,7 +85,7 @@ def lambda_handler(event, context):
         for approver in APPROVERS:
             out += f"<option value='{approver['email']}'>{approver['name']}</option>"
         
-        out += f"</select></td><td style='padding:8px;border:1px solid #ddd;'><a class='btn btn-primary'>Request</a><cwdb-action action='call' endpoint='{REQUEST_LAMBDA_ARN}'>{{\"client\": \"{row['client']}\", \"account\": \"{row['account']}\"}}</cwdb-action></td><td style='padding:8px;border:1px solid #ddd;'><input name='mfa_{rid}' placeholder='123456' style='width:100%;'/></td><td style='padding:8px;border:1px solid #ddd;'><a class='btn btn-secondary'>Secret</a><cwdb-action action='call' endpoint='{SECRET_LAMBDA_ARN}'>{{\"client\": \"{row['client']}\", \"account\": \"{row['account']}\"}}</cwdb-action></td></tr>"
+        out += f"</select></td><td style='padding:8px;border:1px solid #ddd;'><a class='btn btn-primary'>Request</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"request\", \"rowId\": {rid}}}</cwdb-action></td><td style='padding:8px;border:1px solid #ddd;'><input name='mfa_{rid}' placeholder='123456' style='width:100%;'/></td><td style='padding:8px;border:1px solid #ddd;'><a class='btn btn-secondary'>Secret</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"secret\", \"rowId\": {rid}}}</cwdb-action></td></tr>"
     
     out += "</tbody></table></div>"
     return out
