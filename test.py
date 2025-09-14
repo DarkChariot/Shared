@@ -30,8 +30,10 @@ def lambda_handler(event, context):
     wc = event.get("widgetContext", {})
     params = wc.get("params", {})
     forms = wc.get("forms", {}).get("all", {})
-    action = params.get("action")
-    rid = params.get("rowId")
+    
+    # Try both locations for action and rowId
+    action = event.get("action") or params.get("action")
+    rid = event.get("rowId") or params.get("rowId")
     
     if action == "confirm_request" and rid:
         payload = {
