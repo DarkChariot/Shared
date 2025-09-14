@@ -103,7 +103,7 @@ def lambda_handler(event, context):
     
     for row in ROWS:
         rid = row["id"]
-        out += f"<tr><td style='padding:8px;border:1px solid #ddd;'>{row['client']}<input type='hidden' name='client_{rid}' value='{row['client']}'/></td><td style='padding:8px;border:1px solid #ddd;'>{row['account']}<input type='hidden' name='account_{rid}' value='{row['account']}'/></td><td style='padding:8px;border:1px solid #ddd;'><select name='requester_{rid}' style='width:100%;'><option value=''>-- Select Requester --</option>" + "".join([f"<option value='{req['email']}'>{req['name']}</option>" for req in REQUESTERS]) + "</select></td><td style='padding:8px;border:1px solid #ddd;'><select name='approver_{rid}' style='width:100%;'><option value=''>-- Select --</option>"
+        out += f"<tr><td style='padding:8px;border:1px solid #ddd;'>{row['client']}<input type='hidden' name='client_{rid}' value='{row['client']}'/></td><td style='padding:8px;border:1px solid #ddd;'>{row['account']}<input type='hidden' name='account_{rid}' value='{row['account']}'/></td><td style='padding:8px;border:1px solid #ddd;'><select name='requester_{rid}' style='width:100%;'><option value=''>-- Select Requester --</option>" + "".join([f"<option value='{req['email']}'>{req['name']}</option>" for req in REQUESTERS]) + f"</select></td><td style='padding:8px;border:1px solid #ddd;'><select name='approver_{rid}' style='width:100%;'><option value=''>-- Select --</option>"
         
         for approver in APPROVERS:
             out += f"<option value='{approver['email']}'>{approver['name']}</option>"
