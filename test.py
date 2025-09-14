@@ -38,7 +38,7 @@ def lambda_handler(event, context):
     if action == "confirm_request" and rid:
         # Get payload from button data or forms
         if event.get("payload"):
-            payload = json.loads(event.get("payload"))
+            payload = event.get("payload")
         else:
             payload = {
                 "client": forms.get(f"client_{rid}", ""),
@@ -75,7 +75,7 @@ def lambda_handler(event, context):
     if action == "confirm_secret" and rid:
         # Get payload from button data or forms
         if event.get("payload"):
-            payload = json.loads(event.get("payload"))
+            payload = event.get("payload")
         else:
             payload = {
                 "client": forms.get(f"client_{rid}", ""),
