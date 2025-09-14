@@ -49,15 +49,17 @@ def _render_table(endpoint_arn):
 
     for row in ROWS:
         rid = row["id"]
+        client_val = row['client']
+        account_val = row['account']
         out += "<tr>"
         
         # Client (hardcoded)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>{row['client']}"
-        out += f"<input type='hidden' name='client_{rid}' value='{row['client']}'/></td>"
+        out += f"<td style='padding:8px;border:1px solid #ddd;'>{client_val}"
+        out += f"<input type='hidden' name='client_{rid}' value='{client_val}'/></td>"
         
         # Account Name (hardcoded)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>{row['account']}"
-        out += f"<input type='hidden' name='account_{rid}' value='{row['account']}'/></td>"
+        out += f"<td style='padding:8px;border:1px solid #ddd;'>{account_val}"
+        out += f"<input type='hidden' name='account_{rid}' value='{account_val}'/></td>"
         
         # Requester Email (input field)
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
@@ -73,16 +75,15 @@ def _render_table(endpoint_arn):
         
         # Request Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{TARGET_REQUEST_LAMBDA_ARN}">{{"client": "{row['client']}", "account": "{row['account']}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
-        out += "</td>"     
+        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{TARGET_REQUEST_LAMBDA_ARN}">{{"client": "{client_val}", "account": "{account_val}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
+        out += "</td>"
+        
         # MFA Code (input field)
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
         out += f"<input name='mfa_{rid}' placeholder='123456' style='width:100%;'/></td>"
         
         # Secret Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        client_val = row['client']
-        account_val = row['account']
         out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{TARGET_SECRET_LAMBDA_ARN}">{{"client": "{client_val}", "account": "{account_val}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
         out += "</td>"
         
@@ -121,7 +122,6 @@ def lambda_handler(event, context):
     
     if action == "request" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
-        # Debug: show what we received
         debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
             "client": client,
@@ -135,7 +135,6 @@ def lambda_handler(event, context):
     
     if action == "secret" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
-        # Debug: show what we received
         debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
             "client": client,
