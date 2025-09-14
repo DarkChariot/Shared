@@ -119,13 +119,14 @@ def lambda_handler(event, context):
     action = params.get("action")
     rid = params.get("rowId")
     
+    # Debug: Always show what we received
+    debug_info = f"<div style='background:yellow;padding:5px;'>DEBUG - Action: {action}, RID: {rid}, Params: {params}, Forms: {forms}</div>"
+    
     if not action or action == "back":
-        return _render_table(endpoint_arn)
+        return debug_info + _render_table(endpoint_arn)
     
     if action == "request" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
-        # Debug: show what we received
-        debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
             "client": client,
             "account": account,
