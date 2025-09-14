@@ -81,7 +81,9 @@ def _render_table(endpoint_arn):
         
         # Secret Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{TARGET_SECRET_LAMBDA_ARN}">{{"client": "{row['client']}", "account": "{row['account']}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
+        client_val = row['client']
+        account_val = row['account']
+        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{TARGET_SECRET_LAMBDA_ARN}">{{"client": "{client_val}", "account": "{account_val}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
         out += "</td>"
         
         out += "</tr>"
