@@ -1,8 +1,6 @@
 import json
 import boto3
-from typing import Any, Dict, List
 
-# Configuration
 ROWS = [
     {"id": 1, "client": "TestClient A", "account": "TestAccount A"},
     {"id": 2, "client": "TestClient B", "account": "TestAccount B"},
@@ -15,102 +13,9 @@ APPROVERS = [
     {"name": "Carol White", "email": "carol@example.com"},
 ]
 
-TARGET_REQUEST_LAMBDA_ARN = "arn:aws:lambda:us-east-1:123456789012:function:request-handler"
-TARGET_SECRET_LAMBDA_ARN = "arn:aws:lambda:us-east-1:123456789012:function:secret-handler"
-
-def _get_form_data(forms, rid):
-    client = forms.get(f"client_{rid}", "")
-    account = forms.get(f"account_{rid}", "")
-    email = forms.get(f"email_{rid}", "")
-    approver = forms.get(f"approver_{rid}", "")
-    mfa = forms.get(f"mfa_{rid}", "")
-    return client, account, email, approver, mfa
-
-def _invoke_lambda(arn, payload):
-    boto3.client('lambda').invoke(
-        FunctionName=arn,
-        InvocationType='Event',
-        Payload=json.dumps(payload)
-    )
-
-def _render_table(endpoint_arn):
-    out = "<div style='padding:10px;'>"
-    out += "<h3>Request/Secret Dashboard</h3>"
-    out += "<table style='border-collapse:collapse;width:100%;'>"
-    out += "<thead><tr>"
-    out += "<th style='padding:8px;border:1px solid #ddd;'>Client</th>"
-    out += "<th style='padding:8px;border:1px solid #ddd;'>Account Name</th>"
-    out += "<th style='padding:8px;border:1px solid #ddd;'>Requester Email</th>"
-    out += "<th style='padding:8px;border:1px solid #ddd;'>Approver</th>"
-    out += "<th style='padding:8px;border:1px solid #ddd;'>Request</th>"
-    out += "<th style='padding:8px;border:1px solid #ddd;'>MFA Code</th>"
-    out += "<th style='padding:8px;border:1px solid #ddd;'>Secret</th>"
-    out += "</tr></thead><tbody>"
-
-    for row in ROWS:
-        rid = row["id"]
-        out += "<tr>"
-        
-        # Client (hardcoded)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>{row['client']}"
-        out += f"<input type='hidden' name='client_{rid}' value='{row['client']}'/></td>"
-        
-        # Account Name (hardcoded)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>{row['account']}"
-        out += f"<input type='hidden' name='account_{rid}' value='{row['account']}'/></td>"
-        
-        # Requester Email (input field)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f"<input type='email' name='email_{rid}' placeholder='user@example.com' style='width:100%;'/></td>"
-        
-        # Approver (dropdown)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f"<select name='approver_{rid}' style='width:100%;'>"
-        out += "<option value=''>-- Select Approver --</option>"
-        for approver in APPROVERS:
-            out += f"<option value='{approver['email']}'>{approver['name']}</option>"
-        out += "</select></td>"
-        
-        # Request Button
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-primary">Request</a>'
-        out += f'<cwdb-action action="call" endpoint="{endpoint_arn}">'
-        out += f'{{"action": "request", "rowId": {rid}}}'
-        out += '</cwdb-action></td>'
-        
-        # MFA Code (input field)
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f"<input name='mfa_{rid}' placeholder='123456' style='width:100%;'/></td>"
-        
-        # Secret Button
-        out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-secondary">Secret</a>'
-        out += f'<cwdb-action action="call" endpoint="{endpoint_arn}">'
-        out += f'{{"action": "secret", "rowId": {rid}}}'
-        out += '</cwdb-action></td>'
-        
-        out += "</tr>"
-    
-    out += "</tbody></table></div>"
-    return out
-
-def _render_success(message, data):
-    out = "<div style='padding:20px;'>"
-    out += f"<h3 style='color:green;'>{message}</h3>"
-    out += "<div style='background:#f0f8f0;padding:10px;border-radius:5px;'>"
-    for key, value in data.items():
-        out += f"<div><b>{key}:</b> {value}</div>"
-    out += "</div>"
-    out += "<div style='margin-top:10px;'>"
-    out += '<a class="btn">Back to Dashboard</a><cwdb-action action="call" endpoint="">{"action": "back"}</cwdb-action>'
-    out += "</div></div>"
-    return out
-
 def lambda_handler(event, context):
     if event.get("describe"):
-        return {
-            "markdown": "### Request/Secret Dashboard\nManage requests and secrets with MFA verification."
-        }
+        return {"markdown": "### Request/Secret Dashboard"}
     
     endpoint_arn = getattr(context, "invoked_function_arn", "")
     wc = event.get("widgetContext", {})
@@ -119,37 +24,57 @@ def lambda_handler(event, context):
     action = params.get("action")
     rid = params.get("rowId")
     
-    # Debug: Always show what we received
-    debug_info = f"<div style='background:yellow;padding:5px;'>DEBUG - Action: {action}, RID: {rid}, Params: {params}, Forms: {forms}</div>"
-    
-    if not action or action == "back":
-        return debug_info + _render_table(endpoint_arn)
-    
     if action == "request" and rid:
-        client, account, email, approver, mfa = _get_form_data(forms, rid)
         payload = {
-            "client": client,
-            "account": account,
-            "requester_email": email,
-            "approver_email": approver,
-            "mfa_code": mfa
+            "client": forms.get(f"client_{rid}", ""),
+            "account": forms.get(f"account_{rid}", ""),
+            "requester_email": forms.get(f"email_{rid}", ""),
+            "approver_email": forms.get(f"approver_{rid}", ""),
+            "mfa_code": forms.get(f"mfa_{rid}", "")
         }
-        _invoke_lambda(TARGET_REQUEST_LAMBDA_ARN, payload)
-        return debug_info + _render_success("Request Sent Successfully!", payload)
+        try:
+            response = boto3.client('lambda').invoke(
+                FunctionName="showme",
+                InvocationType='RequestResponse',
+                Payload=json.dumps(payload)
+            )
+            result = json.loads(response['Payload'].read())
+        except Exception as e:
+            result = {"error": str(e)}
+        
+        return f"<div style='padding:20px;'><h3 style='color:green;'>Request Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
     
     if action == "secret" and rid:
-        client, account, email, approver, mfa = _get_form_data(forms, rid)
-        # Debug: show what we received
-        debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
-            "client": client,
-            "account": account,
-            "requester_email": email,
-            "approver_email": approver,
-            "mfa_code": mfa
+            "client": forms.get(f"client_{rid}", ""),
+            "account": forms.get(f"account_{rid}", ""),
+            "requester_email": forms.get(f"email_{rid}", ""),
+            "approver_email": forms.get(f"approver_{rid}", ""),
+            "mfa_code": forms.get(f"mfa_{rid}", "")
         }
-        _invoke_lambda(TARGET_SECRET_LAMBDA_ARN, payload)
-        return debug_info + _render_success("Secret Request Sent Successfully!", payload)
+        try:
+            response = boto3.client('lambda').invoke(
+                FunctionName="showme",
+                InvocationType='RequestResponse',
+                Payload=json.dumps(payload)
+            )
+            result = json.loads(response['Payload'].read())
+        except Exception as e:
+            result = {"error": str(e)}
+        
+        return f"<div style='padding:20px;'><h3 style='color:green;'>Secret Sent!</h3><div style='background:#f0f8f0;padding:10px;'><b>Payload:</b> {payload}<br><b>Result:</b> {result}</div><a class='btn'>Back</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div>"
     
-    return _render_table(endpoint_arn)
-#test
+    # Render table
+    out = "<div style='padding:10px;'><h3>Request/Secret Dashboard</h3><table style='border-collapse:collapse;width:100%;'><thead><tr><th style='padding:8px;border:1px solid #ddd;'>Client</th><th style='padding:8px;border:1px solid #ddd;'>Account</th><th style='padding:8px;border:1px solid #ddd;'>Email</th><th style='padding:8px;border:1px solid #ddd;'>Approver</th><th style='padding:8px;border:1px solid #ddd;'>Request</th><th style='padding:8px;border:1px solid #ddd;'>MFA</th><th style='padding:8px;border:1px solid #ddd;'>Secret</th></tr></thead><tbody>"
+    
+    for row in ROWS:
+        rid = row["id"]
+        out += f"<tr><td style='padding:8px;border:1px solid #ddd;'>{row['client']}<input type='hidden' name='client_{rid}' value='{row['client']}'/></td><td style='padding:8px;border:1px solid #ddd;'>{row['account']}<input type='hidden' name='account_{rid}' value='{row['account']}'/></td><td style='padding:8px;border:1px solid #ddd;'><input type='email' name='email_{rid}' placeholder='user@example.com' style='width:100%;'/></td><td style='padding:8px;border:1px solid #ddd;'><select name='approver_{rid}' style='width:100%;'><option value=''>-- Select --</option>"
+        
+        for approver in APPROVERS:
+            out += f"<option value='{approver['email']}'>{approver['name']}</option>"
+        
+        out += f"</select></td><td style='padding:8px;border:1px solid #ddd;'><a class='btn btn-primary'>Request</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"request\", \"rowId\": {rid}}}</cwdb-action></td><td style='padding:8px;border:1px solid #ddd;'><input name='mfa_{rid}' placeholder='123456' style='width:100%;'/></td><td style='padding:8px;border:1px solid #ddd;'><a class='btn btn-secondary'>Secret</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"secret\", \"rowId\": {rid}}}</cwdb-action></td></tr>"
+    
+    out += "</tbody></table></div>"
+    return out
