@@ -73,16 +73,17 @@ def _render_table(endpoint_arn):
         
         # Request Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "request", "rowId": {rid}}}</cwdb-action>'
-        out += "</td>"
-        
+        out += f'<a class="btn btn-primary">Request</a><cwdb-action action="call" endpoint="{TARGET_REQUEST_LAMBDA_ARN}">{{"client": "{row['client']}", "account": "{row['account']}", "req!Q@Wuester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
+        out += "</td>"     
         # MFA Code (input field)
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
         out += f"<input name='mfa_{rid}' placeholder='123456' style='width:100%;'/></td>"
         
         # Secret Button
         out += f"<td style='padding:8px;border:1px solid #ddd;'>"
-        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "secret", "rowId": {rid}}}</cwdb-action>'
+        client_val = row['client']
+        account_val = row['account']
+        out += f'<a class="btn btn-secondary">Secret</a><cwdb-action action="call" endpoint="{TARGET_SECRET_LAMBDA_ARN}">{{"client": "{client_val}", "account": "{account_val}", "requester_email": "PLACEHOLDER_EMAIL", "approver_email": "PLACEHOLDER_APPROVER", "mfa_code": "PLACEHOLDER_MFA"}}</cwdb-action>'
         out += "</td>"
         
         out += "</tr>"
@@ -98,7 +99,7 @@ def _render_success(message, data):
         out += f"<div><b>{key}:</b> {value}</div>"
     out += "</div>"
     out += "<div style='margin-top:10px;'>"
-    out += f'<a class="btn">Back to Dashboard</a><cwdb-action action="call" endpoint="{endpoint_arn}">{{"action": "back"}}</cwdb-action>'
+    out += '<a class="btn">Back to Dashboard</a><cwdb-action action="call" endpoint="">{"action": "back"}</cwdb-action>'
     out += "</div></div>"
     return out
 
@@ -120,6 +121,7 @@ def lambda_handler(event, context):
     
     if action == "request" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
+        # Debug: show what we received
         debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
             "client": client,
@@ -133,6 +135,7 @@ def lambda_handler(event, context):
     
     if action == "secret" and rid:
         client, account, email, approver, mfa = _get_form_data(forms, rid)
+        # Debug: show what we received
         debug_info = f"<div>Action: {action}, RID: {rid}, Forms: {forms}</div>"
         payload = {
             "client": client,
