@@ -36,13 +36,17 @@ def lambda_handler(event, context):
     rid = event.get("rowId") or params.get("rowId")
     
     if action == "confirm_request" and rid:
-        payload = {
-            "client": forms.get(f"client_{rid}", ""),
-            "account": forms.get(f"account_{rid}", ""),
-            "requester_email": forms.get(f"requester_{rid}", ""),
-            "approver_email": forms.get(f"approver_{rid}", ""),
-            "mfa_code": forms.get(f"mfa_{rid}", "")
-        }
+        # Get payload from button data or forms
+        if event.get("payload"):
+            payload = json.loads(event.get("payload"))
+        else:
+            payload = {
+                "client": forms.get(f"client_{rid}", ""),
+                "account": forms.get(f"account_{rid}", ""),
+                "requester_email": forms.get(f"requester_{rid}", ""),
+                "approver_email": forms.get(f"approver_{rid}", ""),
+                "mfa_code": forms.get(f"mfa_{rid}", "")
+            }
         try:
             response = boto3.client('lambda').invoke(
                 FunctionName=REQUEST_LAMBDA_ARN,
@@ -66,16 +70,20 @@ def lambda_handler(event, context):
         # Find approver name from email
         approver_name = next((a['name'] for a in APPROVERS if a['email'] == payload['approver_email']), payload['approver_email'])
         
-        return f"<div style='padding:20px;'><h3>Confirm Request</h3><div style='background:#f9f9f9;padding:15px;border:1px solid #ddd;'><h4>Please confirm the following details:</h4><p><b>Client:</b> {payload['client']}</p><p><b>Account:</b> {payload['account']}</p><p><b>Requester Email:</b> {payload['requester_email']}</p><p><b>Approver:</b> {approver_name}</p><p><b>MFA Code:</b> {payload['mfa_code']}</p></div><div style='margin-top:15px;'><a class='btn btn-success' style='margin-right:10px;'>Confirm Request</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"confirm_request\", \"rowId\": {rid}}}</cwdb-action><a class='btn btn-secondary'>Cancel</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div></div>"
+        return f"<div style='padding:20px;'><h3>Confirm Request</h3><div style='background:#f9f9f9;padding:15px;border:1px solid #ddd;'><h4>Please confirm the following details:</h4><p><b>Client:</b> {payload['client']}</p><p><b>Account:</b> {payload['account']}</p><p><b>Requester Email:</b> {payload['requester_email']}</p><p><b>Approver:</b> {approver_name}</p><p><b>MFA Code:</b> {payload['mfa_code']}</p></div><div style='margin-top:15px;'><a class='btn btn-success' style='margin-right:10px;'>Confirm Request</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"confirm_request\", \"rowId\": {rid}, \"payload\": {json.dumps(payload)}}}</cwdb-action><a class='btn btn-secondary'>Cancel</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div></div>"
     
     if action == "confirm_secret" and rid:
-        payload = {
-            "client": forms.get(f"client_{rid}", ""),
-            "account": forms.get(f"account_{rid}", ""),
-            "requester_email": forms.get(f"requester_{rid}", ""),
-            "approver_email": forms.get(f"approver_{rid}", ""),
-            "mfa_code": forms.get(f"mfa_{rid}", "")
-        }
+        # Get payload from button data or forms
+        if event.get("payload"):
+            payload = json.loads(event.get("payload"))
+        else:
+            payload = {
+                "client": forms.get(f"client_{rid}", ""),
+                "account": forms.get(f"account_{rid}", ""),
+                "requester_email": forms.get(f"requester_{rid}", ""),
+                "approver_email": forms.get(f"approver_{rid}", ""),
+                "mfa_code": forms.get(f"mfa_{rid}", "")
+            }
         try:
             response = boto3.client('lambda').invoke(
                 FunctionName=SECRET_LAMBDA_ARN,
@@ -99,7 +107,7 @@ def lambda_handler(event, context):
         # Find approver name from email
         approver_name = next((a['name'] for a in APPROVERS if a['email'] == payload['approver_email']), payload['approver_email'])
         
-        return f"<div style='padding:20px;'><h3>Confirm Secret Request</h3><div style='background:#f9f9f9;padding:15px;border:1px solid #ddd;'><h4>Please confirm the following details:</h4><p><b>Client:</b> {payload['client']}</p><p><b>Account:</b> {payload['account']}</p><p><b>Requester Email:</b> {payload['requester_email']}</p><p><b>Approver:</b> {approver_name}</p><p><b>MFA Code:</b> {payload['mfa_code']}</p></div><div style='margin-top:15px;'><a class='btn btn-success' style='margin-right:10px;'>Confirm Secret</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"confirm_secret\", \"rowId\": {rid}}}</cwdb-action><a class='btn btn-secondary'>Cancel</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div></div>"
+        return f"<div style='padding:20px;'><h3>Confirm Secret Request</h3><div style='background:#f9f9f9;padding:15px;border:1px solid #ddd;'><h4>Please confirm the following details:</h4><p><b>Client:</b> {payload['client']}</p><p><b>Account:</b> {payload['account']}</p><p><b>Requester Email:</b> {payload['requester_email']}</p><p><b>Approver:</b> {approver_name}</p><p><b>MFA Code:</b> {payload['mfa_code']}</p></div><div style='margin-top:15px;'><a class='btn btn-success' style='margin-right:10px;'>Confirm Secret</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"action\": \"confirm_secret\", \"rowId\": {rid}, \"payload\": {json.dumps(payload)}}}</cwdb-action><a class='btn btn-secondary'>Cancel</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{}}</cwdb-action></div></div>"
     
 
     
