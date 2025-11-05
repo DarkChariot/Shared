@@ -112,10 +112,10 @@ def lambda_handler(event, context):
 
     
     # Debug: Add simple test button
-    debug_test = f"<div style='padding:10px;background:lightcoral;'><h4>Button Test</h4><p>Action: {action}, RID: {rid}, Event: {event}</p><a class='btn'>Test Button</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"test\": \"button_clicked\"}}</cwdb-action></div>"
+    # debug_test = f"<div style='padding:10px;background:lightcoral;'><h4>Button Test</h4><p>Action: {action}, RID: {rid}, Event: {event}</p><a class='btn'>Test Button</a><cwdb-action action='call' endpoint='{endpoint_arn}'>{{\"test\": \"button_clicked\"}}</cwdb-action></div>"
     
     # Render table
-    out = debug_test + "<div style='padding:10px;'><h3>Request/Secret Dashboard</h3><table style='border-collapse:collapse;width:100%;'><thead><tr><th style='padding:8px;border:1px solid #ddd;'>Client</th><th style='padding:8px;border:1px solid #ddd;'>Account</th><th style='padding:8px;border:1px solid #ddd;'>Requester</th><th style='padding:8px;border:1px solid #ddd;'>Approver</th><th style='padding:8px;border:1px solid #ddd;'>Request</th><th style='padding:8px;border:1px solid #ddd;'>MFA</th><th style='padding:8px;border:1px solid #ddd;'>Secret</th></tr></thead><tbody>"
+    out = "<div style='padding:10px;'><h3>Request/Secret Dashboard</h3><table style='border-collapse:collapse;width:100%;'><thead><tr><th style='padding:8px;border:1px solid #ddd;'>Client</th><th style='padding:8px;border:1px solid #ddd;'>Account</th><th style='padding:8px;border:1px solid #ddd;'>Requester</th><th style='padding:8px;border:1px solid #ddd;'>Approver</th><th style='padding:8px;border:1px solid #ddd;'>Request</th><th style='padding:8px;border:1px solid #ddd;'>MFA</th><th style='padding:8px;border:1px solid #ddd;'>Secret</th></tr></thead><tbody>"
     
     for row in ROWS:
         rid = row["id"]
