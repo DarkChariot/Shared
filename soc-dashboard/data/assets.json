@@ -1,0 +1,50 @@
+[
+  {
+    "id": "ASSET-01",
+    "hostname": "DC01.internal.local",
+    "ip": "10.0.0.10",
+    "owner": "IT Ops",
+    "department": "Infrastructure",
+    "criticality": "Critical",
+    "os": "Windows Server 2019",
+    "lastSeen": "2025-11-13T10:00:00Z",
+    "alertCount": 15,
+    "incidentCount": 1,
+    "tags": ["Domain Controller", "AD", "Tier0"],
+    "fullText": "Domain controller for INTERNAL domain.\nHosts AD DS, DNS, and DHCP.\nConsidered Tier 0 / crown jewel asset.\n\nChange control required for all reboots and patches.",
+    "notes": [],
+    "retired": false
+  },
+  {
+    "id": "ASSET-02",
+    "hostname": "EXCH01.internal.local",
+    "ip": "10.0.0.20",
+    "owner": "Messaging",
+    "department": "IT",
+    "criticality": "High",
+    "os": "Windows Server 2016",
+    "lastSeen": "2025-11-13T09:45:00Z",
+    "alertCount": 8,
+    "incidentCount": 1,
+    "tags": ["Email", "O365 Hybrid"],
+    "fullText": "On-prem Exchange hybrid server.\nUsed for mail relay and coexistence with O365.\n\nAlerts here may indicate phishing campaigns or relay abuse.",
+    "notes": [],
+    "retired": false
+  },
+  {
+    "id": "ASSET-03",
+    "hostname": "VPN-GW01.internal.local",
+    "ip": "10.0.0.30",
+    "owner": "Network",
+    "department": "Infrastructure",
+    "criticality": "High",
+    "os": "Linux",
+    "lastSeen": "2025-11-13T09:55:00Z",
+    "alertCount": 12,
+    "incidentCount": 1,
+    "tags": ["VPN", "Remote Access"],
+    "fullText": "Primary VPN gateway for remote users.\nLogs feed directly into SIEM.\n\nFrequent target for credential stuffing and brute force attacks.",
+    "notes": [],
+    "retired": false
+  }
+]

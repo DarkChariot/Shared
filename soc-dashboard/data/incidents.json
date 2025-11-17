@@ -1,0 +1,44 @@
+[
+  {
+    "id": "INC-1023",
+    "title": "Suspicious PowerShell Activity on DC01",
+    "severity": "High",
+    "status": "In Progress",
+    "owner": "analyst.jane",
+    "source": "EDR",
+    "createdAt": "2025-11-13T09:02:00Z",
+    "updatedAt": "2025-11-13T10:15:00Z",
+    "tags": ["PowerShell", "EDR", "Lateral Movement"],
+    "relatedAlerts": ["ALRT-4432", "ALRT-4438"],
+    "fullText": "Incident INC-1023\n\nSummary:\nEDR detected suspicious PowerShell command execution on DC01.\n\nDetails:\n- Encoded PowerShell launched from Office macro.\n- Network connections to rare external IPs.\n- Mimikatz-like strings observed in memory.\n\nPlanned Actions:\n- Isolate host.\n- Collect memory image.\n- Reset domain admin credentials if compromise confirmed.",
+    "notes": []
+  },
+  {
+    "id": "INC-1024",
+    "title": "Multiple Failed Logons from Rare Country",
+    "severity": "Medium",
+    "status": "New",
+    "owner": "unassigned",
+    "source": "SIEM",
+    "createdAt": "2025-11-13T07:12:00Z",
+    "updatedAt": "2025-11-13T07:12:00Z",
+    "tags": ["Authentication", "Geo Anomaly"],
+    "relatedAlerts": ["ALRT-4440"],
+    "fullText": "SIEM use case 'Rare Country Logins' fired multiple times against user HR-USER-12.\n\nAuthentication attempts from IPs in a country not seen in the last 90 days.\n\nUser is normally office-based with no travel scheduled.",
+    "notes": []
+  },
+  {
+    "id": "INC-1025",
+    "title": "Possible Phishing Campaign via O365",
+    "severity": "Critical",
+    "status": "New",
+    "owner": "analyst.mike",
+    "source": "EmailSec",
+    "createdAt": "2025-11-13T06:45:00Z",
+    "updatedAt": "2025-11-13T06:50:00Z",
+    "tags": ["Phishing", "O365", "Credential Theft"],
+    "relatedAlerts": ["ALRT-4441", "ALRT-4442"],
+    "fullText": "Email security gateway detected multiple inbound messages with suspicious links imitating MFA prompts.\n\nTargets include finance and executive assistants.\nLanding pages observed collecting O365 credentials.\n\nBlocklist has been updated and retroactive search performed.",
+    "notes": []
+  }
+]

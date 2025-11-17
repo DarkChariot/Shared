@@ -1,0 +1,72 @@
+[
+  {
+    "id": "ALRT-4432",
+    "rule": "Suspicious PowerShell Command Line",
+    "severity": "High",
+    "status": "Escalated",
+    "source": "EDR",
+    "firstSeen": "2025-11-13T08:55:00Z",
+    "lastSeen": "2025-11-13T09:10:00Z",
+    "count": 12,
+    "assetId": "ASSET-01",
+    "incidentId": "INC-1023",
+    "fullText": "Alert: Suspicious PowerShell Command Line\n\nEDR telemetry:\n- Parent process: WINWORD.EXE\n- Command line: powershell.exe -enc <redacted>\n- User: CORP\\jdoe\n- MITRE: T1059 PowerShell\n\nRaw JSON payload omitted for brevity.",
+    "notes": []
+  },
+  {
+    "id": "ALRT-4438",
+    "rule": "Powershell DownloadFile from Rare Domain",
+    "severity": "High",
+    "status": "New",
+    "source": "EDR",
+    "firstSeen": "2025-11-13T09:05:00Z",
+    "lastSeen": "2025-11-13T09:06:00Z",
+    "count": 3,
+    "assetId": "ASSET-01",
+    "incidentId": "INC-1023",
+    "fullText": "Detected PowerShell WebClient DownloadFile to https://example-bad-domain[.]com from DC01.\n\nUser: CORP\\jdoe\n\nHTTP headers and payload recorded in EDR telemetry.",
+    "notes": []
+  },
+  {
+    "id": "ALRT-4440",
+    "rule": "Rare Country Logins",
+    "severity": "Medium",
+    "status": "New",
+    "source": "SIEM",
+    "firstSeen": "2025-11-13T07:05:00Z",
+    "lastSeen": "2025-11-13T07:10:00Z",
+    "count": 5,
+    "assetId": "ASSET-03",
+    "incidentId": "INC-1024",
+    "fullText": "Multiple authentication failures from IP 203.0.113.10 (Country X) against HR-USER-12.\n\nGeo profile: Country X not seen in last 90 days for this user or peer group.\n\nSource: VPN gateway logs normalized in SIEM.",
+    "notes": []
+  },
+  {
+    "id": "ALRT-4441",
+    "rule": "Inbound Email with Suspicious MFA Link",
+    "severity": "Critical",
+    "status": "Escalated",
+    "source": "EmailSec",
+    "firstSeen": "2025-11-13T06:40:00Z",
+    "lastSeen": "2025-11-13T06:42:00Z",
+    "count": 18,
+    "assetId": "ASSET-02",
+    "incidentId": "INC-1025",
+    "fullText": "EmailSubject: 'Action Required: Confirm Your MFA Settings'\n\nLinks redirect through multiple URL shorteners to a fake O365 login page.\n\nDetection engine score: 95/100 (phishing).",
+    "notes": []
+  },
+  {
+    "id": "ALRT-4442",
+    "rule": "User Clicked Phishing Link",
+    "severity": "Critical",
+    "status": "New",
+    "source": "EmailSec",
+    "firstSeen": "2025-11-13T06:46:00Z",
+    "lastSeen": "2025-11-13T06:46:00Z",
+    "count": 4,
+    "assetId": "ASSET-02",
+    "incidentId": "INC-1025",
+    "fullText": "Click telemetry indicates that four users followed the phishing link within 5 minutes of delivery.\n\nNo MFA prompt observed downstream; credential theft suspected.",
+    "notes": []
+  }
+]

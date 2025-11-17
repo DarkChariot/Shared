@@ -1,0 +1,41 @@
+[
+  {
+    "id": "USR-1001",
+    "name": "Jane Doe",
+    "email": "jane.doe@corp.local",
+    "role": "Incident Responder",
+    "department": "Security",
+    "privileged": true,
+    "lastLogon": "2025-11-13T10:05:00Z",
+    "lastDevice": "DC01.internal.local",
+    "lastLocation": "HQ SOC",
+    "phone": "+1-555-0101",
+    "retired": false
+  },
+  {
+    "id": "USR-1002",
+    "name": "Mike Lee",
+    "email": "mike.lee@corp.local",
+    "role": "SOC Engineer",
+    "department": "Security",
+    "privileged": false,
+    "lastLogon": "2025-11-13T08:20:00Z",
+    "lastDevice": "VPN-GW01.internal.local",
+    "lastLocation": "Remote (Seattle)",
+    "phone": "+1-555-0102",
+    "retired": false
+  },
+  {
+    "id": "USR-1003",
+    "name": "Priya Patel",
+    "email": "priya.patel@corp.local",
+    "role": "IR Manager",
+    "department": "Security",
+    "privileged": true,
+    "lastLogon": "2025-11-13T07:55:00Z",
+    "lastDevice": "Laptop-IR-03",
+    "lastLocation": "HQ SOC",
+    "phone": "+1-555-0103",
+    "retired": false
+  }
+]

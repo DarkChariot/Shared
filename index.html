@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Security Operations Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+  <header class="app-header">
+    <div class="app-inner app-header-inner">
+      <div class="app-header-left">
+        <span id="alerts-indicator" class="header-chip">Alerts: checking...</span>
+      </div>
+      <div class="app-title">Security Operations Dashboard</div>
+      <div class="app-header-right">
+        <div class="header-timestamps">
+          <span id="clock"></span>
+          <span id="last-updated-label">Last updated: --</span>
+        </div>
+        <button id="refresh-button" class="btn btn-small header-refresh" type="button">Refresh</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tab-bar">
+    <div class="app-inner tab-bar-inner">
+      <button class="tab" data-tab="dashboard">Dashboard</button>
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="incidents">Incidents</button>
+      <button class="tab" data-tab="alerts">Alerts</button>
+      <button class="tab" data-tab="assets">Assets</button>
+      <button class="tab" data-tab="users">Users</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </div>
+  </nav>
+
+  <main class="app-inner tab-container">
+    <!-- DASHBOARD TAB -->
+    <section id="tab-dashboard" class="tab-panel">
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Operational Snapshot</h3>
+        </div>
+        <div class="dashboard-kpis">
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Incidents</div>
+            <div class="dashboard-kpi-value" id="dashboard-incidents-total">0</div>
+            <div class="dashboard-kpi-sub" id="dashboard-incidents-open">Open: 0</div>
+          </div>
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Alerts</div>
+            <div class="dashboard-kpi-value" id="dashboard-alerts-total">0</div>
+            <div class="dashboard-kpi-sub" id="dashboard-alerts-critical">Critical: 0</div>
+          </div>
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Assets</div>
+            <div class="dashboard-kpi-value" id="dashboard-assets-total">0</div>
+            <div class="dashboard-kpi-sub" id="dashboard-assets-critical">Critical: 0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid dashboard-chart-grid">
+        <div class="card">
+          <div class="card-header-row">
+            <h3>Incidents by Severity</h3>
+          </div>
+          <div class="dashboard-chart">
+            <canvas id="dashboard-incidents-chart"></canvas>
+          </div>
+          <div class="dashboard-chart-legend" id="dashboard-incidents-legend"></div>
+        </div>
+        <div class="card">
+          <div class="card-header-row">
+            <h3>Alert Volume Trend (7 days)</h3>
+          </div>
+          <div class="dashboard-chart">
+            <canvas id="dashboard-alerts-chart"></canvas>
+          </div>
+          <div class="dashboard-chart-legend" id="dashboard-alerts-legend"></div>
+        </div>
+        <div class="card">
+          <div class="card-header-row">
+            <h3>Assets by Criticality</h3>
+          </div>
+          <div class="dashboard-chart">
+            <canvas id="dashboard-assets-chart"></canvas>
+          </div>
+          <div class="dashboard-chart-legend" id="dashboard-assets-legend"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- OVERVIEW TAB -->
+    <section id="tab-overview" class="tab-panel active">
+      <div id="overview-kpis" class="grid kpi-grid"></div>
+
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Recent Alerts</h3>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+            <tr>
+              <th>ID</th>
+              <th>Rule</th>
+              <th>Severity</th>
+              <th>Source</th>
+              <th>Last Seen</th>
+            </tr>
+            </thead>
+            <tbody id="overview-alerts-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card tab-notes">
+        <h3>Overview Notes</h3>
+        <textarea class="tab-notes-input" data-tab="overview"
+                  placeholder="Shift summary, today’s focus, etc."></textarea>
+      </div>
+    </section>
+
+    <!-- INCIDENTS TAB -->
+    <section id="tab-incidents" class="tab-panel">
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Incidents</h3>
+          <div class="filters-row">
+            <div class="filter-group">
+              <label for="incident-filter-severity">Severity</label>
+              <select id="incident-filter-severity">
+                <option value="all">All</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="incident-filter-status">Status</label>
+              <select id="incident-filter-status">
+                <option value="all">All</option>
+                <option value="New">New</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Contained">Contained</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="incident-filter-search">Search</label>
+              <input type="text" id="incident-filter-search" placeholder="ID, title, owner...">
+            </div>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Severity</th>
+              <th>Status</th>
+              <th>Owner</th>
+              <th>Source</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody id="incidents-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Add Incident</h3>
+        </div>
+        <div class="add-form-grid">
+          <div>
+            <label for="add-incident-title">Title</label>
+            <input id="add-incident-title" type="text" placeholder="Suspicious ...">
+          </div>
+          <div>
+            <label for="add-incident-severity">Severity</label>
+            <select id="add-incident-severity">
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+          <div>
+            <label for="add-incident-status">Status</label>
+            <select id="add-incident-status">
+              <option value="New">New</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Contained">Contained</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </div>
+          <div>
+            <label for="add-incident-owner">Owner</label>
+            <input id="add-incident-owner" type="text" placeholder="analyst.name">
+          </div>
+          <div>
+            <label for="add-incident-source">Source</label>
+            <input id="add-incident-source" type="text" placeholder="SIEM / EDR / ...">
+          </div>
+          <div style="grid-column: 1/-1;">
+            <label for="add-incident-fulltext">Full Text</label>
+            <textarea id="add-incident-fulltext" rows="3" placeholder="Incident description / context"></textarea>
+          </div>
+        </div>
+        <div class="add-form-actions">
+          <button id="add-incident-button" class="btn btn-primary btn-small">Add Incident</button>
+        </div>
+      </div>
+
+      <div class="card tab-notes">
+        <h3>Incidents Notes</h3>
+        <textarea class="tab-notes-input" data-tab="incidents"
+                  placeholder="Notes about incident triage, priorities, etc."></textarea>
+      </div>
+    </section>
+
+    <!-- ALERTS TAB -->
+    <section id="tab-alerts" class="tab-panel">
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Alerts</h3>
+          <div class="filters-row">
+            <div class="filter-group">
+              <label for="alert-filter-severity">Severity</label>
+              <select id="alert-filter-severity">
+                <option value="all">All</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="alert-filter-status">Status</label>
+              <select id="alert-filter-status">
+                <option value="all">All</option>
+                <option value="New">New</option>
+                <option value="Escalated">Escalated</option>
+                <option value="Suppressed">Suppressed</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="alert-filter-search">Search</label>
+              <input type="text" id="alert-filter-search" placeholder="ID, rule, source...">
+            </div>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+            <tr>
+              <th>ID</th>
+              <th>Rule</th>
+              <th>Severity</th>
+              <th>Status</th>
+              <th>Source</th>
+              <th>Asset</th>
+              <th>Last Seen</th>
+              <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody id="alerts-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Add Alert</h3>
+        </div>
+        <div class="add-form-grid">
+          <div>
+            <label for="add-alert-rule">Rule</label>
+            <input id="add-alert-rule" type="text" placeholder="Detection name">
+          </div>
+          <div>
+            <label for="add-alert-severity">Severity</label>
+            <select id="add-alert-severity">
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+          <div>
+            <label for="add-alert-status">Status</label>
+            <select id="add-alert-status">
+              <option value="New">New</option>
+              <option value="Escalated">Escalated</option>
+              <option value="Suppressed">Suppressed</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </div>
+          <div>
+            <label for="add-alert-source">Source</label>
+            <input id="add-alert-source" type="text" placeholder="SIEM / EDR / EmailSec">
+          </div>
+          <div>
+            <label for="add-alert-asset">Asset ID</label>
+            <input id="add-alert-asset" type="text" placeholder="ASSET-...">
+          </div>
+          <div style="grid-column: 1/-1;">
+            <label for="add-alert-fulltext">Full Text</label>
+            <textarea id="add-alert-fulltext" rows="3" placeholder="Alert body / log excerpt"></textarea>
+          </div>
+        </div>
+        <div class="add-form-actions">
+          <button id="add-alert-button" class="btn btn-primary btn-small">Add Alert</button>
+        </div>
+      </div>
+
+      <div class="card tab-notes">
+        <h3>Alerts Notes</h3>
+        <textarea class="tab-notes-input" data-tab="alerts"
+                  placeholder="Notes about noisy rules, tuning ideas, etc."></textarea>
+      </div>
+    </section>
+
+    <!-- ASSETS TAB -->
+    <section id="tab-assets" class="tab-panel">
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Assets</h3>
+          <div class="filters-row">
+            <div class="filter-group">
+              <label for="asset-filter-criticality">Criticality</label>
+              <select id="asset-filter-criticality">
+                <option value="all">All</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="asset-filter-search">Search</label>
+              <input type="text" id="asset-filter-search" placeholder="Hostname, IP, owner...">
+            </div>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+            <tr>
+              <th>ID</th>
+              <th>Hostname</th>
+              <th>IP</th>
+              <th>Criticality</th>
+              <th>Owner</th>
+              <th>OS</th>
+              <th>Last Seen</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody id="assets-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Add Asset</h3>
+        </div>
+        <div class="add-form-grid">
+          <div>
+            <label for="add-asset-hostname">Hostname</label>
+            <input id="add-asset-hostname" type="text" placeholder="HOST01.internal.local">
+          </div>
+          <div>
+            <label for="add-asset-ip">IP</label>
+            <input id="add-asset-ip" type="text" placeholder="10.0.0.x">
+          </div>
+          <div>
+            <label for="add-asset-criticality">Criticality</label>
+            <select id="add-asset-criticality">
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+          <div>
+            <label for="add-asset-owner">Owner</label>
+            <input id="add-asset-owner" type="text" placeholder="Team / Person">
+          </div>
+          <div>
+            <label for="add-asset-os">OS</label>
+            <input id="add-asset-os" type="text" placeholder="Windows / Linux / ...">
+          </div>
+          <div style="grid-column: 1/-1;">
+            <label for="add-asset-fulltext">Full Text</label>
+            <textarea id="add-asset-fulltext" rows="3" placeholder="Business context, dependencies, etc."></textarea>
+          </div>
+        </div>
+        <div class="add-form-actions">
+          <button id="add-asset-button" class="btn btn-primary btn-small">Add Asset</button>
+        </div>
+      </div>
+
+      <div class="card tab-notes">
+        <h3>Assets Notes</h3>
+        <textarea class="tab-notes-input" data-tab="assets"
+                  placeholder="Context about crown jewels, maintenance windows, etc."></textarea>
+      </div>
+    </section>
+
+    <!-- USERS TAB -->
+    <section id="tab-users" class="tab-panel">
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Users</h3>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Department</th>
+              <th>Privileged</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Add User</h3>
+        </div>
+        <div class="add-form-grid">
+          <div>
+            <label for="add-user-name">Name</label>
+            <input id="add-user-name" type="text" placeholder="First Last">
+          </div>
+          <div>
+            <label for="add-user-email">Email</label>
+            <input id="add-user-email" type="email" placeholder="user@corp.local">
+          </div>
+          <div>
+            <label for="add-user-role">Role</label>
+            <input id="add-user-role" type="text" placeholder="Role / Title">
+          </div>
+          <div>
+            <label for="add-user-dept">Department</label>
+            <input id="add-user-dept" type="text" placeholder="Department">
+          </div>
+          <div style="grid-column: 1/-1;">
+            <label class="toggle">
+              <input type="checkbox" id="add-user-privileged">
+              <span>Privileged access</span>
+            </label>
+          </div>
+        </div>
+        <div class="add-form-actions">
+          <button id="add-user-button" class="btn btn-primary btn-small">Add User</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS TAB -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="card">
+        <h3>Appearance</h3>
+        <div class="settings-group">
+          <label class="toggle">
+            <input type="checkbox" id="theme-toggle" checked>
+            <span>Use dark theme</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Analyst</h3>
+        <div class="settings-group">
+          <label for="analyst-name-input">Display name for notes</label>
+          <input type="text" id="analyst-name-input" placeholder="Analyst">
+        </div>
+      </div>
+
+      <div class="card card-centered upload-card">
+        <h3>Upload Data</h3>
+        <p class="upload-card-text">Drop in new JSON, CSV, or text files to keep the dashboard fresh.</p>
+        <div class="upload-controls">
+          <label for="data-upload-input" class="upload-label">Choose a file</label>
+          <input type="file" id="data-upload-input" class="upload-input" accept=".json,.csv,.txt">
+          <label for="data-upload-category" class="upload-label">Category</label>
+          <select id="data-upload-category" class="upload-category">
+            <option value="">Select category</option>
+            <option value="incidents">Incidents</option>
+            <option value="alerts">Alerts</option>
+            <option value="assets">Assets</option>
+            <option value="users">Users</option>
+          </select>
+          <button id="data-upload-button" class="btn btn-primary">Upload</button>
+          <div id="data-upload-status" class="upload-status">No file selected</div>
+        </div>
+        <div class="download-controls">
+          <button id="download-sample-button" class="btn">Download sample JSON</button>
+          <div class="download-hint">Need a template? Grab a ready-to-edit sample file.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- DETAIL DRAWER -->
+  <aside id="detail-drawer" class="drawer">
+    <div class="drawer-header">
+      <h2 id="drawer-title"></h2>
+      <button id="drawer-close" class="drawer-close-btn" aria-label="Close">&times;</button>
+    </div>
+    <div id="drawer-meta" class="drawer-meta"></div>
+    <div class="drawer-tabs">
+      <button class="drawer-tab active" data-dtab="summary">Summary</button>
+      <button class="drawer-tab" data-dtab="fulltext">Full Text</button>
+      <button class="drawer-tab" data-dtab="notes">Notes</button>
+    </div>
+    <div class="drawer-body">
+      <div id="drawer-summary" class="drawer-panel active"></div>
+      <div id="drawer-fulltext" class="drawer-panel"></div>
+      <div id="drawer-notes" class="drawer-panel"></div>
+    </div>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
